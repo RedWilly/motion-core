@@ -6,31 +6,7 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
-    "./core": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
-    },
-    "./animation": {
-      "types": "./dist/animation/index.d.ts",
-      "import": "./dist/animation/index.js"
-    },
-    "./export": {
-      "types": "./dist/export/index.d.ts",
-      "import": "./dist/export/index.js"
-    },
-    "./audio": {
-      "types": "./dist/audio/index.d.ts",
-      "import": "./dist/audio/index.js"
-    },
-    "./integration": {
-      "types": "./dist/integration/index.d.ts",
-      "import": "./dist/integration/index.js"
-    }
+    
   },
   "scripts": {
     "build": "tsup",
