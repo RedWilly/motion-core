@@ -10,8 +10,8 @@ export interface EngineErrorContext {
 export class EngineError extends Error {
   readonly code: string;
   readonly category: EngineErrorCategory;
-  readonly context?: EngineErrorContext;
-  readonly suggestion?: string;
+  readonly context: EngineErrorContext | undefined;
+  readonly suggestion: string | undefined;
   readonly originalError?: unknown;
 
   constructor(options: {
@@ -37,7 +37,9 @@ export function validationError(
   message: string,
   context?: EngineErrorContext,
 ): EngineError {
-  return new EngineError({ code, message, category: 'validation', context });
+  return context === undefined
+    ? new EngineError({ code, message, category: 'validation' })
+    : new EngineError({ code, message, category: 'validation', context });
 }
 
 export function capabilityError(
@@ -45,5 +47,7 @@ export function capabilityError(
   message: string,
   suggestion?: string,
 ): EngineError {
-  return new EngineError({ code, message, category: 'capability', suggestion });
+  return suggestion === undefined
+    ? new EngineError({ code, message, category: 'capability' })
+    : new EngineError({ code, message, category: 'capability', suggestion });
 }

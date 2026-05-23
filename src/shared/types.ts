@@ -40,7 +40,11 @@ export interface LayerConfig {
   visible?: boolean;
   locked?: boolean;
   parent?: Layer;
-  [key: string]: unknown;
+  content?: unknown;
+  scaleMode?: 'fill' | 'fit' | 'none';
+  scrawl?: Readonly<Record<string, unknown>>;
+  text?: string;
+  variant?: 'emitter' | 'net' | 'tracer';
 }
 
 export interface Layer {
@@ -57,6 +61,19 @@ export interface Layer {
   source?: string;
   content?: unknown;
   scrawlEntity: ScrawlEntityAdapter;
+  scrawlState: ScrawlTransformState;
+}
+
+export interface ScrawlTransformState {
+  startX: number;
+  startY: number;
+  roll: number;
+  scale: number;
+  handleX: number;
+  handleY: number;
+  globalAlpha: number;
+  visibility: boolean;
+  [key: string]: unknown;
 }
 
 export interface Composition {
@@ -82,7 +99,7 @@ export interface Composition {
 export interface ScrawlEntityAdapter {
   readonly name: string;
   readonly type: string;
-  set(values: Record<string, unknown>): unknown;
+  set(values: Readonly<Record<string, unknown>> | Readonly<ScrawlTransformState>): unknown;
   kill?(): unknown;
   saveAsPacket?(options?: unknown): string;
 }
@@ -114,7 +131,7 @@ export interface LayerEntityFactoryContext {
   type: LayerType;
   name: string;
   source?: string;
-  config: LayerConfig;
+  config: Readonly<LayerConfig>;
   group?: ScrawlGroupAdapter;
 }
 

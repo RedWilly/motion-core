@@ -5,6 +5,11 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "useUnknownInCatchVariables": true,
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -24,10 +29,9 @@
       "@export/*": ["./src/export/*"],
       "@audio/*": ["./src/audio/*"],
       "@integration/*": ["./src/integration/*"]
-    }
+    },
+    "types": ["bun"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"],
-
-  "types": ["bun"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

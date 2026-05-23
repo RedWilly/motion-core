@@ -10,25 +10,55 @@ import type {
   Layer,
   LayerConfig,
   LayerType,
+  ScrawlTransformState,
   Transform,
 } from '../shared/types';
 import { normalizeCompositionConfig } from '../shared/validation';
 import { MemoryTimeline, NoopRenderer } from './adapters';
 
-const defaultTransform: Transform = {
-  position: { x: 0, y: 0 },
-  rotation: 0,
-  scale: { x: 1, y: 1 },
-  anchor: { x: 0, y: 0 },
-};
+const defaultPositionX = 0;
+const defaultPositionY = 0;
+const defaultRotation = 0;
+const defaultScaleX = 1;
+const defaultScaleY = 1;
+const defaultAnchorX = 0;
+const defaultAnchorY = 0;
 
 function mergeTransform(transform?: Partial<Transform>): Transform {
+  const position = transform?.position;
+  const scale = transform?.scale;
+  const anchor = transform?.anchor;
+
   return {
-    ...defaultTransform,
-    ...transform,
-    position: { ...defaultTransform.position, ...transform?.position },
-    scale: { ...defaultTransform.scale, ...transform?.scale },
-    anchor: { ...defaultTransform.anchor, ...transform?.anchor },
+    position: {
+      x: position?.x ?? defaultPositionX,
+      y: position?.y ?? defaultPositionY,
+    },
+    rotation: transform?.rotation ?? defaultRotation,
+    scale: {
+      x: scale?.x ?? defaultScaleX,
+      y: scale?.y ?? defaultScaleY,
+    },
+    anchor: {
+      x: anchor?.x ?? defaultAnchorX,
+      y: anchor?.y ?? defaultAnchorY,
+    },
+    ...(transform?.rotationX === undefined ? null : { rotationX: transform.rotationX }),
+    ...(transform?.rotationY === undefined ? null : { rotationY: transform.rotationY }),
+    ...(transform?.rotationZ === undefined ? null : { rotationZ: transform.rotationZ }),
+  };
+}
+
+function createScrawlState(transform: Transform, opacity: number, visible: boolean): ScrawlTransformState {
+  return {
+    startX: transform.position.x,
+    startY: transform.position.y,
+    roll: transform.rotation,
+    scale: transform.scale.x,
+    handleX: transform.anchor.x,
+    handleY: transform.anchor.y,
+    globalAlpha: opacity,
+    visibility: visible,
   };
 }
 
@@ -41,13 +71,14 @@ export function createComposition(
   const timeline = adapters.createTimeline?.(normalized.duration) ?? new MemoryTimeline(normalized.duration);
   const group = adapters.createGroup?.(normalized.name);
   const registry = new EntityMappingRegistry(adapters.entityFactories);
-  const runtime: CompositionRuntime = {
+  const baseRuntime = {
     id,
     name: normalized.name,
-    group,
     layers: [],
     timeline,
   };
+  const runtime: CompositionRuntime =
+    group === undefined ? baseRuntime : { ...baseRuntime, group };
 
   const composition = {
     id,
@@ -63,30 +94,43 @@ export function createComposition(
 
     addLayer(type: LayerType, source?: string, layerConfig: LayerConfig = {}): Layer {
       const layerId = createId(type);
-      const entity = registry.createEntity({
+      const baseEntityContext = {
         id: layerId,
         type,
         name: layerConfig.name ?? layerId,
-        source,
         config: layerConfig,
-        group,
-      });
+      };
+      const groupedEntityContext =
+        group === undefined ? baseEntityContext : { ...baseEntityContext, group };
+      const entity = registry.createEntity(
+        source === undefined ? groupedEntityContext : { ...groupedEntityContext, source },
+      );
       const parent = layerConfig.parent ?? null;
-      const layer: Layer = {
+      const transform = mergeTransform(layerConfig.transform);
+      const visible = layerConfig.visible ?? true;
+      const opacity = layerConfig.opacity ?? 1;
+      const baseLayer = {
         id: layerId,
         type,
         name: layerConfig.name ?? layerId,
         parent,
         children: [],
         zIndex: this.layers.length,
-        transform: mergeTransform(layerConfig.transform),
-        visible: layerConfig.visible ?? true,
+        transform,
+        visible,
         locked: layerConfig.locked ?? false,
-        opacity: layerConfig.opacity ?? 1,
-        source,
-        content: layerConfig.content,
+        opacity,
         scrawlEntity: entity,
+        scrawlState: createScrawlState(transform, opacity, visible),
       };
+      const layer: Layer =
+        source === undefined
+          ? layerConfig.content === undefined
+            ? baseLayer
+            : { ...baseLayer, content: layerConfig.content }
+          : layerConfig.content === undefined
+            ? { ...baseLayer, source }
+            : { ...baseLayer, source, content: layerConfig.content };
 
       parent?.children.push(layer);
       this.layers.push(layer);
@@ -98,11 +142,13 @@ export function createComposition(
     },
 
     removeLayer(layer: Layer): void {
-      for (const child of [...layer.children]) {
-        this.removeLayer(child);
+      while (layer.children.length > 0) {
+        const child = layer.children[layer.children.length - 1];
+        if (child) this.removeLayer(child);
       }
 
-      layer.parent?.children.splice(layer.parent.children.indexOf(layer), 1);
+      const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
+      if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       group?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();
       registry.unregister(layer);

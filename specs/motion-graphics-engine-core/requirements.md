@@ -43,7 +43,7 @@ The Engine exposes a motion-graphics-focused API without reimplementing features
 
 ## References
 
-- **Scrawl-canvas**: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html/
+- **Scrawl-canvas**: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html
   - LLM Summary: https://github.com/KaliedaRik/Scrawl-canvas/blob/v8/LLM-summary-for-scrawl-canvas.md
 - **GSAP**: https://gsap.com/docs/
 - **Mediabunny**: https://mediabunny.dev/

@@ -1,4 +1,4 @@
-import type { Composition, Layer, ScrawlEntityAdapter } from '../shared/types';
+import type { Composition, Layer, ScrawlEntityAdapter, ScrawlTransformState } from '../shared/types';
 
 export interface MediaSyncTarget {
   readonly kind: 'video' | 'audio';
@@ -15,17 +15,20 @@ export interface SynchronizationOptions {
   onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
 }
 
-export function mapTransformToScrawl(layer: Layer): Record<string, unknown> {
-  return {
-    startX: layer.transform.position.x,
-    startY: layer.transform.position.y,
-    roll: layer.transform.rotation,
-    scale: layer.transform.scale.x,
-    handleX: layer.transform.anchor.x,
-    handleY: layer.transform.anchor.y,
-    globalAlpha: layer.opacity,
-    visibility: layer.visible,
-  };
+export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
+  const transform = layer.transform;
+  const state = layer.scrawlState;
+
+  state.startX = transform.position.x;
+  state.startY = transform.position.y;
+  state.roll = transform.rotation;
+  state.scale = transform.scale.x;
+  state.handleX = transform.anchor.x;
+  state.handleY = transform.anchor.y;
+  state.globalAlpha = layer.opacity;
+  state.visibility = layer.visible;
+
+  return state;
 }
 
 export function syncLayerToScrawl(layer: Layer): void {

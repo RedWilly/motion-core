@@ -496,7 +496,7 @@ This implementation plan follows a **wrapper/adapter architecture** where we bui
 
 ## Resources
 
-- **Scrawl-canvas Docs**: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html/
+- **Scrawl-canvas Docs**: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html
 - **Scrawl-canvas LLM Summary**: https://github.com/KaliedaRik/Scrawl-canvas/blob/v8/LLM-summary-for-scrawl-canvas.md
 - **GSAP Documentation**: https://gsap.com/docs/
 - **Mediabunny Documentation**: https://mediabunny.dev/

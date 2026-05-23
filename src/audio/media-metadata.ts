@@ -50,7 +50,11 @@ export async function readMediaMetadata(source: Blob): Promise<MediaMetadata> {
           : undefined,
       ]);
 
-      return { duration, mimeType, video, audio };
+      const metadata: MediaMetadata = { duration, mimeType };
+      if (video !== undefined) metadata.video = video;
+      if (audio !== undefined) metadata.audio = audio;
+
+      return metadata;
     } finally {
       input.dispose();
     }

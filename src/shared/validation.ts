@@ -1,6 +1,16 @@
 import { validationError } from './errors';
 import type { CompositionConfig } from './types';
 
+export interface NormalizedCompositionConfig {
+  width: number;
+  height: number;
+  duration: number;
+  frameRate: number;
+  backgroundColor: string;
+  name: string;
+  canvas?: HTMLCanvasElement;
+}
+
 export function assertPositiveInteger(value: number, propertyName: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw validationError(
@@ -31,16 +41,17 @@ export function assertFrameRate(value: number): void {
   }
 }
 
-export function normalizeCompositionConfig(config: CompositionConfig): Required<Omit<CompositionConfig, 'canvas'>> & Pick<CompositionConfig, 'canvas'> {
-  const normalized = {
+export function normalizeCompositionConfig(config: CompositionConfig): NormalizedCompositionConfig {
+  const normalized: NormalizedCompositionConfig = {
     width: config.width,
     height: config.height,
     duration: config.duration ?? 10,
     frameRate: config.frameRate ?? 30,
     backgroundColor: config.backgroundColor ?? 'transparent',
     name: config.name ?? 'composition',
-    canvas: config.canvas,
   };
+
+  if (config.canvas !== undefined) normalized.canvas = config.canvas;
 
   assertPositiveInteger(normalized.width, 'width');
   assertPositiveInteger(normalized.height, 'height');

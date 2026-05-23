@@ -22,7 +22,7 @@ function baseEntityConfig(context: LayerEntityFactoryContext): Record<string, un
   return {
     name: context.name,
     group: context.group,
-    ...(context.config.scrawl ?? {}),
+    ...(context.config.scrawl ?? null),
   };
 }
 

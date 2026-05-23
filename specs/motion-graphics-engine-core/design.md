@@ -51,7 +51,7 @@ The API design follows **progressive complexity disclosure**, offering three tie
 ### Technology Stack
 
 - **Scrawl-canvas**: Canvas rendering, scene graph, filters, particles, text, animation, assets, DOM integration, accessibility
-  - Docs: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html/
+  - Docs: https://scrawl-v8.rikweb.org.uk/docs/reference/index.html
   - LLM Summary: https://github.com/KaliedaRik/Scrawl-canvas/blob/v8/LLM-summary-for-scrawl-canvas.md
 - **GSAP**: Timeline sequencing, animation choreography, advanced easing functions
   - Docs: https://gsap.com/docs/
