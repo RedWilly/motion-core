@@ -195,6 +195,11 @@ export interface LayerMaskState extends Required<Pick<ScrawlMaskConfig, 'mode'>>
   scrawlFilter?: ScrawlFilterAdapter;
 }
 
+export interface ScrawlEffectHandle {
+  readonly id: string;
+  readonly filter: ScrawlFilterAdapter;
+}
+
 export interface ScrawlTransformState {
   startX: number;
   startY: number;
@@ -228,6 +233,10 @@ export interface Composition {
   timeline: TimelineAdapter;
   renderer: RenderAdapter;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
+  addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
+  removeEffect(layer: Layer, effect: LayerEffectState | string): void;
+  clearEffects(layer: Layer): void;
+  setMask(layer: Layer, config: ScrawlMaskConfig): LayerMaskState;
   removeLayer(layer: Layer): void;
   reorderLayer(layer: Layer, newIndex: number): void;
   play(): void;
@@ -266,6 +275,15 @@ export interface ScrawlFilterAdapter {
   set?(values: Readonly<Record<string, unknown>>): unknown;
   kill?(): unknown;
   saveAsPacket?(options?: unknown): string;
+}
+
+export interface ScrawlEffectsAdapter {
+  createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle;
+  addEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, config: ScrawlEffectConfig): ScrawlEffectHandle;
+  updateEffect(effect: ScrawlEffectHandle, values: Readonly<Record<string, unknown>>): void;
+  removeEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, effect: ScrawlEffectHandle): void;
+  clearEffects(target: ScrawlEntityAdapter | ScrawlGroupAdapter): void;
+  applyMask(target: ScrawlEntityAdapter, config?: ScrawlMaskConfig): ScrawlEffectHandle | undefined;
 }
 
 export interface RenderAdapter {
@@ -317,6 +335,7 @@ export interface EngineAdapters {
   createTimeline?: (duration: number) => TimelineAdapter;
   createRenderer?: (composition: CompositionRuntime) => RenderAdapter;
   createGroup?: (compositionName: string) => ScrawlGroupAdapter | undefined;
+  createEffectsController?: () => ScrawlEffectsAdapter | undefined;
   entityFactories?: Partial<Record<LayerType, LayerEntityFactory>>;
   importScrawlPacket?: (packet: string) => unknown;
 }

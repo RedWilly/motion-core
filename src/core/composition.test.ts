@@ -1,5 +1,49 @@
 import { describe, expect, test } from 'bun:test';
+import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 import { createComposition } from './composition';
+
+function createFakeEffectsAdapter(): { adapter: ScrawlEffectsAdapter; calls: string[] } {
+  const calls: string[] = [];
+  let nextFilter = 0;
+  const adapter: ScrawlEffectsAdapter = {
+    createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle {
+      const id = config.id ?? `filter-${nextFilter}`;
+      const filter = {
+        name: `${id}-${nextFilter++}`,
+        type: 'Filter',
+        kill() {
+          calls.push(`kill:${id}`);
+        },
+      };
+      calls.push(`create:${id}`);
+      return { id, filter };
+    },
+    addEffect(_target, config) {
+      const handle = this.createEffect(config);
+      calls.push(`add:${handle.id}`);
+      return handle;
+    },
+    updateEffect(effect, values) {
+      calls.push(`update:${effect.id}:${Object.keys(values).join(',')}`);
+    },
+    removeEffect(_target, effect) {
+      calls.push(`remove:${effect.id}`);
+    },
+    clearEffects() {
+      calls.push('clear');
+    },
+    applyMask(_target, config) {
+      calls.push(`mask:${config?.mode ?? 'clip'}`);
+      if (config?.feather === undefined || config.feather === 0) return undefined;
+      return this.addEffect(_target, {
+        id: 'mask-feather',
+        actions: [{ action: 'gaussian-blur', radius: config.feather }],
+      });
+    },
+  };
+
+  return { adapter, calls };
+}
 
 describe('createComposition', () => {
   test('applies defaults and validates required dimensions', () => {
@@ -88,5 +132,47 @@ describe('createComposition', () => {
       'Scrawl mask feather must be a non-negative number.',
     );
     expect(composition.layers).toHaveLength(0);
+  });
+
+  test('wires layer effects and masks through the engine effects adapter', () => {
+    const { adapter, calls } = createFakeEffectsAdapter();
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      { createEffectsController: () => adapter },
+    );
+    const layer = composition.addLayer('shape', undefined, {
+      effects: [{ id: 'soft', actions: [{ action: 'gaussian-blur', radius: 4 }] }],
+      mask: { mode: 'clip', feather: 2 },
+    });
+
+    const added = composition.addEffect(layer, {
+      id: 'edge',
+      actions: [{ action: 'threshold', level: 6 }],
+    });
+    const addedFilterName = added.scrawlFilter?.name;
+    composition.removeEffect(layer, 'soft');
+    composition.clearEffects(layer);
+    expect(added.scrawlFilter).toBeUndefined();
+    composition.setMask(layer, { mode: 'destination-in', feather: 3 });
+    composition.removeLayer(layer);
+
+    expect(addedFilterName).toBe('edge-2');
+    expect(calls).toEqual([
+      'create:soft',
+      'add:soft',
+      'mask:clip',
+      'create:mask-feather',
+      'add:mask-feather',
+      'create:edge',
+      'add:edge',
+      'remove:soft-0',
+      'remove:edge-2',
+      'remove:mask-feather-1',
+      'mask:destination-in',
+      'create:mask-feather',
+      'add:mask-feather',
+      'remove:mask-feather-3',
+    ]);
+    expect(composition.layers).toEqual([]);
   });
 });

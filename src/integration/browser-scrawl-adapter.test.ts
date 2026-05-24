@@ -77,6 +77,18 @@ function createFakeScrawl() {
         },
       };
     },
+    makeFilter(items) {
+      return {
+        name: String(items['name']),
+        type: 'Filter',
+        set() {
+          return this;
+        },
+        kill() {
+          return undefined;
+        },
+      };
+    },
     makeBlock(items) {
       calls.entityName = String(items['name']);
       return {

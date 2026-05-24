@@ -1,6 +1,8 @@
 import { capabilityError } from '../shared/errors';
 import type {
   ScrawlEffectConfig,
+  ScrawlEffectHandle,
+  ScrawlEffectsAdapter,
   ScrawlEntityAdapter,
   ScrawlFilterAdapter,
   ScrawlFilterAction,
@@ -24,19 +26,9 @@ export type {
   ScrawlMaskMode,
 } from '../shared/types';
 
-export interface ScrawlEffectHandle {
-  readonly id: string;
-  readonly filter: ScrawlFilterAdapter;
-}
+export type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 
-export interface ScrawlEffectsController {
-  createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle;
-  addEffect(target: ScrawlFilterTarget, config: ScrawlEffectConfig): ScrawlEffectHandle;
-  updateEffect(effect: ScrawlEffectHandle, values: Readonly<Record<string, unknown>>): void;
-  removeEffect(target: ScrawlFilterTarget, effect: ScrawlEffectHandle): void;
-  clearEffects(target: ScrawlFilterTarget): void;
-  applyMask(maskEntity: ScrawlEntityAdapter, config?: ScrawlMaskConfig): ScrawlEffectHandle | undefined;
-}
+export interface ScrawlEffectsController extends ScrawlEffectsAdapter {}
 
 export interface ScrawlEffectsOptions {
   readonly namespace?: string;
@@ -180,5 +172,13 @@ function forgetFilter(
   target: ScrawlFilterTarget,
   effect: ScrawlEffectHandle,
 ): void {
-  ownedFilters.get(target)?.delete(effect);
+  const filters = ownedFilters.get(target);
+  if (!filters) return;
+
+  for (const owned of filters) {
+    if (owned === effect || owned.filter === effect.filter) {
+      filters.delete(owned);
+      return;
+    }
+  }
 }

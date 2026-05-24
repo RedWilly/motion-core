@@ -8,12 +8,22 @@ import type {
   CompositionRuntime,
   EngineAdapters,
   Layer,
+  LayerEffectState,
+  LayerMaskState,
   LayerConfig,
   LayerType,
+  ScrawlEffectConfig,
+  ScrawlEffectsAdapter,
+  ScrawlMaskConfig,
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
-import { normalizeCompositionConfig, normalizeLayerEffects, normalizeScrawlMaskConfig } from '../shared/validation';
+import {
+  normalizeCompositionConfig,
+  normalizeLayerEffects,
+  normalizeScrawlEffectConfig,
+  normalizeScrawlMaskConfig,
+} from '../shared/validation';
 import { MemoryTimeline, NoopRenderer } from './adapters';
 
 const defaultPositionX = 0;
@@ -64,6 +74,59 @@ function createScrawlState(transform: Transform, opacity: number, visible: boole
   };
 }
 
+function attachLayerEffect(
+  controller: ScrawlEffectsAdapter | undefined,
+  layer: Layer,
+  effect: LayerEffectState,
+): void {
+  if (controller === undefined) return;
+  const handle = controller.addEffect(layer.scrawlEntity, effect);
+  effect.scrawlFilter = handle.filter;
+}
+
+function detachLayerEffect(
+  controller: ScrawlEffectsAdapter | undefined,
+  layer: Layer,
+  effect: LayerEffectState,
+): void {
+  if (controller !== undefined && effect.scrawlFilter !== undefined) {
+    controller.removeEffect(layer.scrawlEntity, {
+      id: effect.scrawlFilter.name,
+      filter: effect.scrawlFilter,
+    });
+    delete effect.scrawlFilter;
+    return;
+  }
+
+  effect.scrawlFilter?.kill?.();
+  delete effect.scrawlFilter;
+}
+
+function applyLayerMask(
+  controller: ScrawlEffectsAdapter | undefined,
+  layer: Layer,
+  mask: LayerMaskState | null,
+): void {
+  if (controller === undefined || mask === null) return;
+  const handle = controller.applyMask(layer.scrawlEntity, mask);
+  if (handle !== undefined) mask.scrawlFilter = handle.filter;
+}
+
+function detachMaskFeather(
+  controller: ScrawlEffectsAdapter | undefined,
+  layer: Layer,
+): void {
+  const filter = layer.mask?.scrawlFilter;
+  if (filter === undefined) return;
+
+  if (controller !== undefined) {
+    controller.removeEffect(layer.scrawlEntity, { id: filter.name, filter });
+  } else {
+    filter.kill?.();
+  }
+  delete layer.mask?.scrawlFilter;
+}
+
 export function createComposition(
   config: CompositionConfig,
   adapters: EngineAdapters = {},
@@ -72,6 +135,7 @@ export function createComposition(
   const id = createId('composition');
   const timeline = adapters.createTimeline?.(normalized.duration) ?? new MemoryTimeline(normalized.duration);
   const group = adapters.createGroup?.(normalized.name);
+  const effectsController = adapters.createEffectsController?.();
   const registry = new EntityMappingRegistry(adapters.entityFactories);
   const baseRuntime = {
     id,
@@ -144,8 +208,45 @@ export function createComposition(
       registry.register(layer, entity);
       group?.addArtefacts?.(entity);
       syncLayerToScrawl(layer);
+      for (const effect of layer.effects) attachLayerEffect(effectsController, layer, effect);
+      applyLayerMask(effectsController, layer, layer.mask);
 
       return layer;
+    },
+
+    addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState {
+      const effect = normalizeScrawlEffectConfig(config, `effect-${layer.effects.length}`);
+      layer.effects.push(effect);
+      attachLayerEffect(effectsController, layer, effect);
+      return effect;
+    },
+
+    removeEffect(layer: Layer, effectOrId: LayerEffectState | string): void {
+      const index =
+        typeof effectOrId === 'string'
+          ? layer.effects.findIndex((effect) => effect.id === effectOrId)
+          : layer.effects.indexOf(effectOrId);
+      if (index < 0) return;
+
+      const effect = layer.effects[index];
+      if (effect === undefined) return;
+      detachLayerEffect(effectsController, layer, effect);
+      layer.effects.splice(index, 1);
+    },
+
+    clearEffects(layer: Layer): void {
+      for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
+      for (const effect of layer.effects) delete effect.scrawlFilter;
+      layer.effects.length = 0;
+    },
+
+    setMask(layer: Layer, config: ScrawlMaskConfig): LayerMaskState {
+      detachMaskFeather(effectsController, layer);
+      const mask = normalizeScrawlMaskConfig(config) as LayerMaskState;
+
+      layer.mask = mask;
+      applyLayerMask(effectsController, layer, mask);
+      return mask;
     },
 
     removeLayer(layer: Layer): void {
@@ -156,6 +257,8 @@ export function createComposition(
 
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
+      detachMaskFeather(effectsController, layer);
+      for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
       group?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();
       registry.unregister(layer);
