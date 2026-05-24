@@ -1,0 +1,101 @@
+import { describe, expect, test } from 'bun:test';
+import { createComposition } from '../core/composition';
+import { createTimelineSynchronizer, type MediaSyncTarget } from './synchronization';
+
+function createMediaTarget(name: string, seekOffset = 0) {
+  const events: string[] = [];
+  let currentTime = 0;
+  const target: MediaSyncTarget = {
+    kind: 'video',
+    name,
+    getCurrentTime() {
+      return currentTime;
+    },
+    async seek(time: number) {
+      currentTime = time + seekOffset;
+      events.push(`seek:${time}`);
+    },
+    play() {
+      events.push('play');
+    },
+    pause() {
+      events.push('pause');
+    },
+  };
+
+  return { events, target };
+}
+
+describe('TimelineSynchronizer', () => {
+  test('coordinates play and pause across timeline, renderer, and media', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const { events, target } = createMediaTarget('video');
+    const sync = createTimelineSynchronizer(composition);
+
+    sync.addMedia(target);
+    sync.play();
+    sync.pause();
+
+    expect(events).toEqual(['play', 'pause']);
+  });
+
+  test('seeks timeline, media, layers, and renderer to one time source', async () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5 });
+    const layer = composition.addLayer('shape', undefined, {
+      transform: { position: { x: 10, y: 20 } },
+    });
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    layer.scrawlEntity.set = (values) => {
+      setCalls.push({ ...values });
+      return layer.scrawlEntity;
+    };
+    const { events, target } = createMediaTarget('video');
+    const sync = createTimelineSynchronizer(composition);
+
+    sync.addMedia(target);
+    await sync.seek(2);
+
+    expect(composition.timeline.time()).toBe(2);
+    expect(events).toEqual(['seek:2']);
+    expect(setCalls.at(-1)?.['startX']).toBe(10);
+  });
+
+  test('emits desync only when media exceeds one frame tolerance', async () => {
+    const composition = createComposition({ width: 100, height: 100, frameRate: 30 });
+    const warnings: string[] = [];
+    const withinTolerance = createMediaTarget('within', 1 / 60);
+    const outsideTolerance = createMediaTarget('outside', 1 / 15);
+    const sync = createTimelineSynchronizer(composition, {
+      onDesync: ({ target }) => warnings.push(target.name),
+    });
+
+    sync.addMedia(withinTolerance.target);
+    sync.addMedia(outsideTolerance.target);
+    await sync.seek(1);
+
+    expect(warnings).toEqual(['outside']);
+  });
+
+  test('removes media targets without leaving stale sync work', async () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const { events, target } = createMediaTarget('video');
+    const sync = createTimelineSynchronizer(composition);
+
+    sync.addMedia(target);
+    sync.removeMedia(target);
+    await sync.seek(1);
+
+    expect(events).toEqual([]);
+  });
+
+  test('skips media seeks already within one frame tolerance', async () => {
+    const composition = createComposition({ width: 100, height: 100, frameRate: 30 });
+    const { events, target } = createMediaTarget('video');
+    const sync = createTimelineSynchronizer(composition);
+
+    sync.addMedia(target);
+    await sync.seek(1 / 60);
+
+    expect(events).toEqual([]);
+  });
+});

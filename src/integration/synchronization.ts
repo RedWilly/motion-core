@@ -15,6 +15,11 @@ export interface SynchronizationOptions {
   onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
 }
 
+export interface TimelineSynchronizerConfig {
+  frameRate?: number;
+  onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
+}
+
 export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
   const transform = layer.transform;
   const state = layer.scrawlState;
@@ -83,4 +88,84 @@ export async function syncToTimelineTime(
   }
 
   await composition.renderer.renderFrame();
+}
+
+export class TimelineSynchronizer {
+  private readonly composition: Composition;
+  private readonly media: MediaSyncTarget[] = [];
+  private readonly frameRate: number;
+  private readonly onDesync: ((details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void) | undefined;
+
+  constructor(composition: Composition, config: TimelineSynchronizerConfig = {}) {
+    this.composition = composition;
+    this.frameRate = config.frameRate ?? composition.frameRate;
+    this.onDesync = config.onDesync;
+  }
+
+  addMedia(target: MediaSyncTarget): void {
+    if (!this.media.includes(target)) this.media.push(target);
+  }
+
+  removeMedia(target: MediaSyncTarget): void {
+    const index = this.media.indexOf(target);
+    if (index >= 0) this.media.splice(index, 1);
+  }
+
+  play(): void {
+    this.composition.timeline.play();
+    this.composition.renderer.play();
+
+    for (const target of this.media) {
+      void target.play?.();
+    }
+  }
+
+  pause(): void {
+    this.composition.timeline.pause();
+    this.composition.renderer.pause();
+
+    for (const target of this.media) {
+      target.pause?.();
+    }
+  }
+
+  async seek(time: number, suppressEvents = true): Promise<void> {
+    this.composition.timeline.seek(time, suppressEvents);
+    this.syncLayers();
+    await this.seekMedia(this.composition.timeline.time());
+    await this.composition.renderer.renderFrame();
+  }
+
+  async syncFrame(): Promise<void> {
+    const time = this.composition.timeline.time();
+    this.syncLayers();
+    await this.seekMedia(time);
+    await this.composition.renderer.renderFrame();
+  }
+
+  private syncLayers(): void {
+    for (const layer of this.composition.layers) syncLayerToScrawl(layer);
+  }
+
+  private async seekMedia(time: number): Promise<void> {
+    const tolerance = 1 / this.frameRate;
+
+    for (const target of this.media) {
+      const beforeSeekTime = target.getCurrentTime();
+      if (Math.abs(beforeSeekTime - time) <= tolerance) continue;
+
+      await target.seek(time);
+      const mediaTime = target.getCurrentTime();
+      if (Math.abs(mediaTime - time) > tolerance) {
+        this.onDesync?.({ target, timelineTime: time, mediaTime });
+      }
+    }
+  }
+}
+
+export function createTimelineSynchronizer(
+  composition: Composition,
+  config?: TimelineSynchronizerConfig,
+): TimelineSynchronizer {
+  return new TimelineSynchronizer(composition, config);
 }

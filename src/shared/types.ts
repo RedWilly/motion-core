@@ -146,6 +146,18 @@ export interface TimelineAdapter {
   time(): number;
   duration(value?: number): number;
   eventCallback?(event: string, callback: (() => void) | null): void;
+  to?(
+    target: object,
+    vars: Readonly<Record<string, unknown>>,
+    position?: number | string,
+  ): TimelineTweenAdapter;
+  set?(target: object, vars: Readonly<Record<string, unknown>>, position?: number | string): TimelineTweenAdapter;
+  remove?(tween: TimelineTweenAdapter): void;
+  killTweensOf?(target: object, properties?: string): void;
+}
+
+export interface TimelineTweenAdapter {
+  kill(): void;
 }
 
 export interface LayerEntityFactoryContext {
