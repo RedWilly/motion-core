@@ -3,9 +3,11 @@ import {
   analyzeFrequencyBands,
   createAudioAnalyzer,
   createEmptyAudioAnalysisFrame,
+  createMediabunnyAudioBridge,
   normalizeAmplitude,
   normalizeBand,
   type AudioFftSize,
+  type MediabunnyAudioRuntime,
 } from './index';
 
 describe('audio normalization helpers', () => {
@@ -74,6 +76,10 @@ class FakeAnalyserNode {
   disconnect(_node?: unknown): void {}
 }
 
+class FakeAudioParam {
+  value = 1;
+}
+
 class FakeAudioNode {
   connectedTo: unknown[] = [];
   disconnectedFrom: unknown[] = [];
@@ -88,12 +94,50 @@ class FakeAudioNode {
   }
 }
 
+class FakeGainNode extends FakeAudioNode {
+  readonly gain = new FakeAudioParam();
+}
+
+class FakeAudioBuffer {}
+
+class FakeAudioBufferSourceNode extends FakeAudioNode {
+  buffer: unknown = null;
+  starts: Array<{ when: number; offset?: number; duration?: number }> = [];
+  stopped = false;
+
+  start(when: number, offset?: number, duration?: number): void {
+    this.starts.push(
+      duration === undefined
+        ? offset === undefined
+          ? { when }
+          : { when, offset }
+        : { when, offset, duration },
+    );
+  }
+
+  stop(): void {
+    this.stopped = true;
+  }
+}
+
 class FakeAudioContext {
   readonly sampleRate = 44_100;
   readonly analyser = new FakeAnalyserNode();
+  readonly gain = new FakeGainNode();
+  readonly sources: FakeAudioBufferSourceNode[] = [];
 
   createAnalyser(): FakeAnalyserNode {
     return this.analyser;
+  }
+
+  createGain(): FakeGainNode {
+    return this.gain;
+  }
+
+  createBufferSource(): FakeAudioBufferSourceNode {
+    const source = new FakeAudioBufferSourceNode();
+    this.sources.push(source);
+    return source;
   }
 }
 
@@ -139,5 +183,151 @@ describe('AudioAnalyzer', () => {
         smoothingTimeConstant: 2,
       }),
     ).toThrow('smoothingTimeConstant');
+  });
+});
+
+describe('Mediabunny audio bridge', () => {
+  test('decodes the buffer for the requested source time and routes it into Web Audio', async () => {
+    const context = new FakeAudioContext();
+    const requestedTimes: number[] = [];
+    let inputDisposed = false;
+    const audioBuffer = new FakeAudioBuffer() as unknown as AudioBuffer;
+
+    const runtime: MediabunnyAudioRuntime = {
+      ALL_FORMATS: Symbol('formats'),
+      AudioBufferSink: class {
+        constructor(_audioTrack: unknown) {}
+
+        async getBuffer(timestamp: number) {
+          requestedTimes.push(timestamp);
+          return {
+            buffer: audioBuffer,
+            timestamp: 2,
+            duration: 4,
+          };
+        }
+      },
+      BlobSource: class {
+        constructor(_source: Blob) {}
+      },
+      Input: class {
+        constructor(_options: { source: unknown; formats: unknown }) {}
+
+        async getDurationFromMetadata(): Promise<number | null> {
+          return 10;
+        }
+
+        async computeDuration(): Promise<number> {
+          throw new Error('metadata duration should be used');
+        }
+
+        async getPrimaryAudioTrack(): Promise<unknown> {
+          return { id: 'audio' };
+        }
+
+        dispose(): void {
+          inputDisposed = true;
+        }
+      },
+    };
+
+    const bridge = await createMediabunnyAudioBridge(
+      new Blob(['audio']),
+      context as unknown as AudioContext,
+      { inPoint: 2, outPoint: 6, playbackRate: 1, volume: 0.5, fadeIn: 1, fadeOut: 1 },
+      async () => runtime,
+    );
+
+    await bridge.play(1);
+
+    expect(requestedTimes).toEqual([3]);
+    expect(context.sources).toHaveLength(1);
+    expect(context.sources[0]?.buffer).toBe(audioBuffer);
+    expect(context.sources[0]?.connectedTo).toEqual([context.gain]);
+    expect(context.sources[0]?.starts).toEqual([{ when: 0, offset: 1, duration: 3 }]);
+    expect(context.gain.gain.value).toBe(0.5);
+
+    bridge.dispose();
+    expect(context.sources[0]?.stopped).toBe(true);
+    expect(inputDisposed).toBe(true);
+  });
+
+  test('seek preloads only the timestamp buffer and does not create a Web Audio source', async () => {
+    const context = new FakeAudioContext();
+    const requestedTimes: number[] = [];
+    const runtime: MediabunnyAudioRuntime = {
+      ALL_FORMATS: null,
+      AudioBufferSink: class {
+        constructor(_audioTrack: unknown) {}
+        async getBuffer(timestamp: number) {
+          requestedTimes.push(timestamp);
+          return null;
+        }
+      },
+      BlobSource: class {},
+      Input: class {
+        async getDurationFromMetadata(): Promise<number | null> {
+          return 2;
+        }
+        async computeDuration(): Promise<number> {
+          return 2;
+        }
+        async getPrimaryAudioTrack(): Promise<unknown> {
+          return {};
+        }
+        dispose(): void {}
+      },
+    };
+
+    const bridge = await createMediabunnyAudioBridge(
+      new Blob(['audio']),
+      context as unknown as AudioContext,
+      { inPoint: 0.5 },
+      async () => runtime,
+    );
+
+    await bridge.seek(0.25);
+
+    expect(requestedTimes).toEqual([0.75]);
+    expect(context.sources).toHaveLength(0);
+    bridge.dispose();
+  });
+
+  test('rejects media without an audio track and invalid playback config', async () => {
+    const context = new FakeAudioContext();
+    const runtime: MediabunnyAudioRuntime = {
+      ALL_FORMATS: null,
+      AudioBufferSink: class {
+        constructor(_audioTrack: unknown) {}
+        async getBuffer(): Promise<null> {
+          return null;
+        }
+      },
+      BlobSource: class {},
+      Input: class {
+        async getDurationFromMetadata(): Promise<number | null> {
+          return 2;
+        }
+        async computeDuration(): Promise<number> {
+          return 2;
+        }
+        async getPrimaryAudioTrack(): Promise<null> {
+          return null;
+        }
+        dispose(): void {}
+      },
+    };
+
+    await expect(
+      createMediabunnyAudioBridge(new Blob(['audio']), context as unknown as AudioContext, {}, async () => runtime),
+    ).rejects.toThrow('audio track');
+    await expect(
+      createMediabunnyAudioBridge(
+        new Blob(['audio']),
+        context as unknown as AudioContext,
+        { outPoint: 1, inPoint: 1 },
+        async () => runtime,
+      ),
+    ).rejects.toThrow('outPoint');
   });
 });
