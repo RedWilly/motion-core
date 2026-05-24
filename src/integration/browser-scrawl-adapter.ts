@@ -93,6 +93,10 @@ class BrowserScrawlRenderer implements RenderAdapter {
     });
   }
 
+  getFrameCanvas(): HTMLCanvasElement {
+    return this.element;
+  }
+
   kill(): void {
     this.render.kill?.();
   }

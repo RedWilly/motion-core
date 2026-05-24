@@ -154,6 +154,7 @@ export interface RenderAdapter {
   pause(): void;
   renderFrame(): void | Promise<void>;
   captureFrame?(options: Readonly<FrameCaptureOptions>): Promise<Blob>;
+  getFrameCanvas?(): HTMLCanvasElement | OffscreenCanvas;
 }
 
 export interface FrameCaptureOptions {

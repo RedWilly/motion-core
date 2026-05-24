@@ -14,10 +14,16 @@ export interface FrameExportConfig {
 export interface VideoExportConfig {
   format: 'mp4' | 'webm';
   bitrate?: number;
-  quality?: number;
+  quality?: VideoExportQuality;
   frameRate?: number;
   includeAudio?: boolean;
   onProgress?: (progress: number) => void;
+}
+
+export type VideoExportQuality = 'very-low' | 'low' | 'medium' | 'high' | 'very-high';
+
+export interface VideoExportAdapter {
+  export(composition: Composition, config: Readonly<NormalizedVideoExportConfig>): Promise<Blob>;
 }
 
 export async function exportFrame(
@@ -37,19 +43,60 @@ export async function exportFrame(
 }
 
 export async function exportVideo(
-  _composition: Composition,
-  _config: VideoExportConfig,
+  composition: Composition,
+  config: VideoExportConfig,
+  adapter: VideoExportAdapter = createMediabunnyVideoExportAdapter(),
 ): Promise<Blob> {
-  throw capabilityError(
-    'VIDEO_EXPORT_UNAVAILABLE',
-    'Video export requires the browser WebCodecs and Mediabunny export adapter.',
-    'Use the export adapter once the composition is backed by a browser canvas.',
-  );
+  return adapter.export(composition, normalizeVideoExportConfig(composition, config));
 }
 
 interface NormalizedFrameExportConfig {
   capture: FrameCaptureOptions;
   outputType: FrameExportOutputType;
+}
+
+export interface NormalizedVideoExportConfig {
+  format: 'mp4' | 'webm';
+  codec: 'avc' | 'vp9';
+  frameRate: number;
+  frameCount: number;
+  frameDuration: number;
+  bitrate?: number;
+  quality: VideoExportQuality;
+  includeAudio: boolean;
+  onProgress?: (progress: number) => void;
+}
+
+interface BufferTargetLike {
+  buffer: ArrayBuffer | null;
+}
+
+interface OutputLike {
+  addVideoTrack(source: CanvasSourceLike): unknown;
+  start(): Promise<void>;
+  finalize(): Promise<void>;
+  cancel(): Promise<void>;
+  getMimeType(): Promise<string>;
+}
+
+interface CanvasSourceLike {
+  add(timestamp: number, duration?: number): Promise<void>;
+}
+
+export interface MediabunnyVideoRuntime {
+  BufferTarget: new () => BufferTargetLike;
+  CanvasSource: new (
+    canvas: HTMLCanvasElement | OffscreenCanvas,
+    encodingConfig: Readonly<Record<string, unknown>>,
+  ) => CanvasSourceLike;
+  Mp4OutputFormat: new () => unknown;
+  Output: new (options: Readonly<{ format: unknown; target: BufferTargetLike }>) => OutputLike;
+  QUALITY_HIGH: unknown;
+  QUALITY_LOW: unknown;
+  QUALITY_MEDIUM: unknown;
+  QUALITY_VERY_HIGH: unknown;
+  QUALITY_VERY_LOW: unknown;
+  WebMOutputFormat: new () => unknown;
 }
 
 function normalizeFrameExportConfig(config: FrameExportConfig): NormalizedFrameExportConfig {
@@ -61,6 +108,79 @@ function normalizeFrameExportConfig(config: FrameExportConfig): NormalizedFrameE
   return config.quality === undefined
     ? { capture: { mimeType }, outputType }
     : { capture: { mimeType, quality: config.quality }, outputType };
+}
+
+export function normalizeVideoExportConfig(
+  composition: Composition,
+  config: VideoExportConfig,
+): NormalizedVideoExportConfig {
+  const frameRate = config.frameRate ?? composition.frameRate;
+  validateFrameRate(frameRate);
+  if (config.bitrate !== undefined) validateBitrate(config.bitrate);
+
+  const frameCount = Math.ceil(composition.duration * frameRate);
+  const frameDuration = 1 / frameRate;
+  const quality = config.quality ?? 'medium';
+  const base = {
+    format: config.format,
+    codec: config.format === 'mp4' ? 'avc' : 'vp9',
+    frameRate,
+    frameCount,
+    frameDuration,
+    quality,
+    includeAudio: config.includeAudio ?? false,
+  } satisfies Omit<NormalizedVideoExportConfig, 'bitrate' | 'onProgress'>;
+
+  return {
+    ...base,
+    ...(config.bitrate === undefined ? null : { bitrate: config.bitrate }),
+    ...(config.onProgress === undefined ? null : { onProgress: config.onProgress }),
+  };
+}
+
+export function createMediabunnyVideoExportAdapter(
+  runtimeLoader: () => Promise<MediabunnyVideoRuntime> = loadMediabunnyVideoRuntime,
+): VideoExportAdapter {
+  return {
+    async export(composition: Composition, config: Readonly<NormalizedVideoExportConfig>): Promise<Blob> {
+      const canvas = getExportCanvas(composition);
+      const runtime = await runtimeLoader();
+      const target = new runtime.BufferTarget();
+      const output = new runtime.Output({
+        format: config.format === 'mp4' ? new runtime.Mp4OutputFormat() : new runtime.WebMOutputFormat(),
+        target,
+      });
+      const source = new runtime.CanvasSource(canvas, {
+        codec: config.codec,
+        bitrate: config.bitrate ?? qualityToMediabunny(runtime, config.quality),
+        keyFrameInterval: 2,
+        sizeChangeBehavior: 'deny',
+      });
+
+      output.addVideoTrack(source);
+
+      try {
+        await output.start();
+        for (let frame = 0; frame < config.frameCount; frame += 1) {
+          const time = frame * config.frameDuration;
+          await syncToTimelineTime(composition, time, { frameRate: config.frameRate });
+          await source.add(time, config.frameDuration);
+          config.onProgress?.((frame + 1) / config.frameCount);
+        }
+
+        await output.finalize();
+      } catch (error) {
+        await output.cancel();
+        throw error;
+      }
+
+      if (target.buffer === null) {
+        throw capabilityError('VIDEO_EXPORT_EMPTY', 'Mediabunny finalized without producing an output buffer.');
+      }
+
+      return new Blob([target.buffer], { type: await output.getMimeType() });
+    },
+  };
 }
 
 function formatToMimeType(format: FrameExportFormat): FrameCaptureOptions['mimeType'] {
@@ -108,6 +228,58 @@ function validateQuality(quality: number): void {
       'Frame export quality must be between 0 and 1.',
       { propertyName: 'quality', value: quality },
     );
+  }
+}
+
+function validateFrameRate(frameRate: number): void {
+  if (!Number.isInteger(frameRate) || frameRate < 1 || frameRate > 120) {
+    throw validationError(
+      'INVALID_VIDEO_EXPORT_FRAME_RATE',
+      'Video export frameRate must be an integer between 1 and 120.',
+      { propertyName: 'frameRate', value: frameRate },
+    );
+  }
+}
+
+function validateBitrate(bitrate: number): void {
+  if (!Number.isFinite(bitrate) || bitrate <= 0) {
+    throw validationError(
+      'INVALID_VIDEO_EXPORT_BITRATE',
+      'Video export bitrate must be a positive number.',
+      { propertyName: 'bitrate', value: bitrate },
+    );
+  }
+}
+
+function getExportCanvas(composition: Composition): HTMLCanvasElement | OffscreenCanvas {
+  const getFrameCanvas = composition.renderer.getFrameCanvas;
+  if (getFrameCanvas === undefined) {
+    throw capabilityError(
+      'VIDEO_EXPORT_CANVAS_UNAVAILABLE',
+      'Video export requires a renderer backed by a capturable canvas.',
+      'Create the composition with the browser Scrawl-canvas adapter before exporting video.',
+    );
+  }
+
+  return getFrameCanvas.call(composition.renderer);
+}
+
+async function loadMediabunnyVideoRuntime(): Promise<MediabunnyVideoRuntime> {
+  return import('mediabunny') as unknown as Promise<MediabunnyVideoRuntime>;
+}
+
+function qualityToMediabunny(runtime: MediabunnyVideoRuntime, quality: VideoExportQuality): unknown {
+  switch (quality) {
+    case 'very-low':
+      return runtime.QUALITY_VERY_LOW;
+    case 'low':
+      return runtime.QUALITY_LOW;
+    case 'medium':
+      return runtime.QUALITY_MEDIUM;
+    case 'high':
+      return runtime.QUALITY_HIGH;
+    case 'very-high':
+      return runtime.QUALITY_VERY_HIGH;
   }
 }
 
