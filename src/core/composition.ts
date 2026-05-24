@@ -1,5 +1,5 @@
 import { EntityMappingRegistry } from '../integration/entity-mapping';
-import { serializeComposition } from '../integration/serialization';
+import { hydrateSerializedComposition, serializeComposition } from '../integration/serialization';
 import { syncLayerToScrawl } from '../integration/synchronization';
 import { createId } from '../shared/ids';
 import type {
@@ -115,6 +115,7 @@ export function createComposition(
         id: layerId,
         type,
         name: layerConfig.name ?? layerId,
+        config: layerConfig,
         parent,
         children: [],
         zIndex: this.layers.length,
@@ -196,4 +197,11 @@ export function createComposition(
   } satisfies Composition;
 
   return composition;
+}
+
+export function deserializeComposition(
+  json: string,
+  adapters: EngineAdapters = {},
+): Composition {
+  return hydrateSerializedComposition(json, createComposition, adapters);
 }

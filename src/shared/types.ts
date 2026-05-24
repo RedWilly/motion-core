@@ -80,6 +80,7 @@ export interface Layer {
   id: string;
   type: LayerType;
   name: string;
+  config: Readonly<LayerConfig>;
   parent: Layer | null;
   children: Layer[];
   zIndex: number;
@@ -199,6 +200,7 @@ export interface EngineAdapters {
   createRenderer?: (composition: CompositionRuntime) => RenderAdapter;
   createGroup?: (compositionName: string) => ScrawlGroupAdapter | undefined;
   entityFactories?: Partial<Record<LayerType, LayerEntityFactory>>;
+  importScrawlPacket?: (packet: string) => unknown;
 }
 
 export interface CompositionRuntime {
@@ -226,6 +228,8 @@ export interface SerializedComposition {
     name: string;
     parentId: string | null;
     zIndex: number;
+    config?: SerializedLayerConfig;
+    scrawlEntityName: string;
     source?: string;
     content?: unknown;
     transform: Transform;
@@ -234,4 +238,21 @@ export interface SerializedComposition {
     opacity: number;
     scrawlPacket?: string;
   }>;
+  timeline: {
+    time: number;
+    duration: number;
+  };
+  assets: SerializedAsset[];
+}
+
+export type SerializedLayerConfig = Omit<
+  LayerConfig,
+  'content' | 'locked' | 'name' | 'opacity' | 'parent' | 'transform' | 'visible'
+>;
+
+export interface SerializedAsset {
+  id: string;
+  layerId: string;
+  type: LayerType;
+  source: string;
 }

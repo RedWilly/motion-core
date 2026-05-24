@@ -31,6 +31,7 @@ export interface ScrawlBrowserModule extends ScrawlFactoryModule {
   addCanvas(items?: Readonly<Record<string, unknown>>): ScrawlCanvasAdapter;
   findCanvas(name: string): ScrawlCanvasAdapter | undefined;
   getCanvas(name: string): ScrawlCanvasAdapter | undefined;
+  importPacket?(packet: string): unknown;
   makeRender(items: Readonly<Record<string, unknown>>): ScrawlRenderAdapter;
   purge(namespace: string): void;
   setCurrentCanvas?(canvas: ScrawlCanvasAdapter | string): void;
@@ -165,6 +166,9 @@ export function createBrowserScrawlAdapter(
     namespace,
     canvas,
     entityFactories: createScrawlEntityFactories(scrawl, { namespace }),
+    importScrawlPacket(packet: string): unknown {
+      return scrawl.importPacket?.(packet);
+    },
     createGroup: createGroupFactory(scrawl, canvas, namespace),
     createRenderer(composition: CompositionRuntime): RenderAdapter {
       const render = scrawl.makeRender({
