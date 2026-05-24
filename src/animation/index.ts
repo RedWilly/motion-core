@@ -1,7 +1,7 @@
 import { EngineError, validationError } from '../shared/errors';
 import type { Composition, Layer, TimelineTweenAdapter } from '../shared/types';
 import { createId } from '../shared/ids';
-import { syncLayerToScrawl } from '../integration/synchronization';
+import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 
 export type AnimatableProperty =
   | 'position.x'
@@ -83,6 +83,8 @@ export interface ExpressionApplyResult {
   applied: number;
   errors: readonly EngineError[];
 }
+
+export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
 
 interface PropertyBinding {
   target: object;
@@ -346,6 +348,17 @@ export class AnimationController {
 
 export function createAnimationController(composition: Composition): AnimationController {
   return new AnimationController(composition);
+}
+
+export function createExpressionRenderHook(
+  controller: AnimationController,
+  getAudio?: ExpressionAudioProvider,
+): PreRenderHook {
+  return {
+    beforeRender(time: number): void {
+      controller.applyExpressions(time, getAudio?.());
+    },
+  };
 }
 
 function bindProperty(layer: Layer, property: AnimatableProperty): PropertyBinding {

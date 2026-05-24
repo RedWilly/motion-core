@@ -9,14 +9,20 @@ export interface MediaSyncTarget {
   pause?(): void;
 }
 
+export interface PreRenderHook {
+  beforeRender(time: number): void | Promise<void>;
+}
+
 export interface SynchronizationOptions {
   frameRate: number;
   media?: MediaSyncTarget[];
+  hooks?: PreRenderHook[];
   onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
 }
 
 export interface TimelineSynchronizerConfig {
   frameRate?: number;
+  hooks?: PreRenderHook[];
   onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
 }
 
@@ -87,12 +93,17 @@ export async function syncToTimelineTime(
     }
   }
 
+  for (const hook of options.hooks ?? []) {
+    await hook.beforeRender(time);
+  }
+
   await composition.renderer.renderFrame();
 }
 
 export class TimelineSynchronizer {
   private readonly composition: Composition;
   private readonly media: MediaSyncTarget[] = [];
+  private readonly hooks: PreRenderHook[] = [];
   private readonly frameRate: number;
   private readonly onDesync: ((details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void) | undefined;
 
@@ -100,6 +111,7 @@ export class TimelineSynchronizer {
     this.composition = composition;
     this.frameRate = config.frameRate ?? composition.frameRate;
     this.onDesync = config.onDesync;
+    if (config.hooks !== undefined) this.hooks.push(...config.hooks);
   }
 
   addMedia(target: MediaSyncTarget): void {
@@ -109,6 +121,15 @@ export class TimelineSynchronizer {
   removeMedia(target: MediaSyncTarget): void {
     const index = this.media.indexOf(target);
     if (index >= 0) this.media.splice(index, 1);
+  }
+
+  addHook(hook: PreRenderHook): void {
+    if (!this.hooks.includes(hook)) this.hooks.push(hook);
+  }
+
+  removeHook(hook: PreRenderHook): void {
+    const index = this.hooks.indexOf(hook);
+    if (index >= 0) this.hooks.splice(index, 1);
   }
 
   play(): void {
@@ -133,6 +154,7 @@ export class TimelineSynchronizer {
     this.composition.timeline.seek(time, suppressEvents);
     this.syncLayers();
     await this.seekMedia(this.composition.timeline.time());
+    await this.runHooks(this.composition.timeline.time());
     await this.composition.renderer.renderFrame();
   }
 
@@ -140,6 +162,7 @@ export class TimelineSynchronizer {
     const time = this.composition.timeline.time();
     this.syncLayers();
     await this.seekMedia(time);
+    await this.runHooks(time);
     await this.composition.renderer.renderFrame();
   }
 
@@ -160,6 +183,10 @@ export class TimelineSynchronizer {
         this.onDesync?.({ target, timelineTime: time, mediaTime });
       }
     }
+  }
+
+  private async runHooks(time: number): Promise<void> {
+    for (const hook of this.hooks) await hook.beforeRender(time);
   }
 }
 

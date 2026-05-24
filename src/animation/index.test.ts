@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
-import { createAnimationController } from './index';
+import { syncToTimelineTime } from '../integration/synchronization';
+import { createAnimationController, createExpressionRenderHook } from './index';
 
 function createObservedLayer() {
   const setCalls: Array<Readonly<Record<string, unknown>>> = [];
@@ -140,5 +141,37 @@ describe('AnimationController', () => {
     controller.applyExpressions(1);
 
     expect(layer.transform.rotation).toBe(30);
+  });
+
+  test('applies expressions through the synchronization render hook', async () => {
+    const { composition, layer, setCalls } = createObservedLayer();
+    const controller = createAnimationController(composition);
+    const hook = createExpressionRenderHook(controller);
+
+    controller.setExpression(layer, 'position.x', 'time * 10');
+    await syncToTimelineTime(composition, 2, {
+      frameRate: composition.frameRate,
+      hooks: [hook],
+    });
+
+    expect(layer.transform.position.x).toBe(20);
+    expect(setCalls.at(-1)?.['startX']).toBe(20);
+  });
+
+  test('expression render hook can provide current audio data', async () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+    const hook = createExpressionRenderHook(controller, () => ({
+      amplitude: 0.25,
+      bands: { bass: 0.5, mid: 0, treble: 0 },
+    }));
+
+    controller.setExpression(layer, 'opacity', 'audio.amplitude + audio.bands.bass');
+    await syncToTimelineTime(composition, 0, {
+      frameRate: composition.frameRate,
+      hooks: [hook],
+    });
+
+    expect(layer.opacity).toBe(0.75);
   });
 });

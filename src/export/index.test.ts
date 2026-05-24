@@ -4,7 +4,9 @@ import type { CompositionRuntime, FrameCaptureOptions, RenderAdapter } from '../
 import {
   createMediabunnyVideoExportAdapter,
   exportFrame,
+  exportFrameSequence,
   exportVideo,
+  normalizeFrameSequenceExportConfig,
   normalizeVideoExportConfig,
   type MediabunnyVideoRuntime,
 } from './index';
@@ -188,5 +190,78 @@ describe('exportVideo', () => {
     expect(samples).toEqual([{ timestamp: 0, duration: 0.25 }]);
     expect(progress).toEqual([1]);
     expect(finalized).toBe(true);
+  });
+});
+
+describe('exportFrameSequence', () => {
+  test('exports sequential frames with padding and frame step', async () => {
+    let renderer: CapturingRenderer | undefined;
+    const progress: number[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 1, frameRate: 4 },
+      {
+        createRenderer(runtime) {
+          renderer = new CapturingRenderer(runtime);
+          return renderer;
+        },
+      },
+    );
+
+    const frames = await exportFrameSequence(composition, {
+      frameRate: 4,
+      frameStep: 2,
+      filenamePrefix: 'shot-',
+      filenamePadding: 3,
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(frames.map((frame) => frame.index)).toEqual([0, 2, 4]);
+    expect(frames.map((frame) => frame.time)).toEqual([0, 0.5, 1]);
+    expect(frames.map((frame) => frame.filename)).toEqual(['shot-000.png', 'shot-002.png', 'shot-004.png']);
+    expect(frames.every((frame) => frame.data instanceof Blob)).toBe(true);
+    expect(renderer?.renderTimes).toEqual([0, 0.5, 1]);
+    expect(progress).toEqual([1 / 3, 2 / 3, 1]);
+  });
+
+  test('passes frame export options through each sequence frame', async () => {
+    let renderer: CapturingRenderer | undefined;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 0.5, frameRate: 2 },
+      {
+        createRenderer(runtime) {
+          renderer = new CapturingRenderer(runtime);
+          return renderer;
+        },
+      },
+    );
+
+    const frames = await exportFrameSequence(composition, {
+      format: 'webp',
+      quality: 0.75,
+      outputType: 'arraybuffer',
+      filenamePadding: 1,
+    });
+
+    expect(frames.map((frame) => frame.filename)).toEqual(['frame0.webp', 'frame1.webp']);
+    expect(frames.every((frame) => frame.data instanceof ArrayBuffer)).toBe(true);
+    expect(renderer?.captureOptions).toEqual([
+      { mimeType: 'image/webp', quality: 0.75 },
+      { mimeType: 'image/webp', quality: 0.75 },
+    ]);
+  });
+
+  test('normalizes and rejects invalid frame sequence options', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 2, frameRate: 10 });
+
+    expect(normalizeFrameSequenceExportConfig(composition, { startTime: 0.5, endTime: 1, frameRate: 10 })).toMatchObject({
+      frameCount: 6,
+      frameDuration: 0.1,
+      extension: 'png',
+    });
+    expect(() => normalizeFrameSequenceExportConfig(composition, { startTime: 1, endTime: 0 })).toThrow('endTime');
+    expect(() => normalizeFrameSequenceExportConfig(composition, { frameStep: 0 })).toThrow('frameStep');
+    expect(() => normalizeFrameSequenceExportConfig(composition, { filenamePadding: -1 })).toThrow(
+      'filenamePadding',
+    );
   });
 });

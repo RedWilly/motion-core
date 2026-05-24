@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
-import { createTimelineSynchronizer, type MediaSyncTarget } from './synchronization';
+import { createTimelineSynchronizer, syncToTimelineTime, type MediaSyncTarget } from './synchronization';
 
 function createMediaTarget(name: string, seekOffset = 0) {
   const events: string[] = [];
@@ -97,5 +97,64 @@ describe('TimelineSynchronizer', () => {
     await sync.seek(1 / 60);
 
     expect(events).toEqual([]);
+  });
+
+  test('runs render hooks after media seek and before rendering', async () => {
+    const order: string[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100, frameRate: 30 },
+      {
+        createRenderer() {
+          return {
+            play() {},
+            pause() {},
+            renderFrame() {
+              order.push('render');
+            },
+          };
+        },
+      },
+    );
+    const target: MediaSyncTarget = {
+      kind: 'video',
+      name: 'video',
+      getCurrentTime: () => 0,
+      async seek() {
+        order.push('media');
+      },
+    };
+    const sync = createTimelineSynchronizer(composition, {
+      hooks: [{ beforeRender: (time) => order.push(`hook:${time}`) }],
+    });
+
+    sync.addMedia(target);
+    await sync.seek(1);
+
+    expect(order).toEqual(['media', 'hook:1', 'render']);
+  });
+
+  test('syncToTimelineTime also runs hooks before frame render', async () => {
+    const order: string[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100, frameRate: 30 },
+      {
+        createRenderer() {
+          return {
+            play() {},
+            pause() {},
+            renderFrame() {
+              order.push('render');
+            },
+          };
+        },
+      },
+    );
+
+    await syncToTimelineTime(composition, 0.5, {
+      frameRate: 30,
+      hooks: [{ beforeRender: (time) => order.push(`hook:${time}`) }],
+    });
+
+    expect(order).toEqual(['hook:0.5', 'render']);
   });
 });

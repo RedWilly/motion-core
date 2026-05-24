@@ -11,6 +11,23 @@ export interface FrameExportConfig {
   outputType?: FrameExportOutputType;
 }
 
+export interface FrameSequenceExportConfig extends FrameExportConfig {
+  startTime?: number;
+  endTime?: number;
+  frameRate?: number;
+  frameStep?: number;
+  filenamePrefix?: string;
+  filenamePadding?: number;
+  onProgress?: (progress: number) => void;
+}
+
+export interface ExportedFrame<TData = Blob | ArrayBuffer | string> {
+  index: number;
+  time: number;
+  filename: string;
+  data: TData;
+}
+
 export interface VideoExportConfig {
   format: 'mp4' | 'webm';
   bitrate?: number;
@@ -42,6 +59,34 @@ export async function exportFrame(
   return blobToDataUrl(blob);
 }
 
+export async function exportFrameSequence(
+  composition: Composition,
+  config: FrameSequenceExportConfig = {},
+): Promise<Array<ExportedFrame<Blob | ArrayBuffer | string>>> {
+  const normalized = normalizeFrameSequenceExportConfig(composition, config);
+  const frames: Array<ExportedFrame<Blob | ArrayBuffer | string>> = [];
+
+  for (let index = 0; index < normalized.frameCount; index += 1) {
+    const frameNumber = index * normalized.frameStep;
+    const time = normalized.startTime + frameNumber * normalized.frameDuration;
+    const data = await exportFrame(composition, time, normalized.frameConfig);
+    frames.push({
+      index: frameNumber,
+      time,
+      filename: createFrameFilename(
+        normalized.filenamePrefix,
+        frameNumber,
+        normalized.filenamePadding,
+        normalized.extension,
+      ),
+      data,
+    });
+    normalized.onProgress?.((index + 1) / normalized.frameCount);
+  }
+
+  return frames;
+}
+
 export async function exportVideo(
   composition: Composition,
   config: VideoExportConfig,
@@ -53,6 +98,20 @@ export async function exportVideo(
 interface NormalizedFrameExportConfig {
   capture: FrameCaptureOptions;
   outputType: FrameExportOutputType;
+}
+
+interface NormalizedFrameSequenceExportConfig {
+  startTime: number;
+  endTime: number;
+  frameRate: number;
+  frameDuration: number;
+  frameStep: number;
+  frameCount: number;
+  filenamePrefix: string;
+  filenamePadding: number;
+  extension: string;
+  frameConfig: FrameExportConfig;
+  onProgress?: (progress: number) => void;
 }
 
 export interface NormalizedVideoExportConfig {
@@ -108,6 +167,56 @@ function normalizeFrameExportConfig(config: FrameExportConfig): NormalizedFrameE
   return config.quality === undefined
     ? { capture: { mimeType }, outputType }
     : { capture: { mimeType, quality: config.quality }, outputType };
+}
+
+export function normalizeFrameSequenceExportConfig(
+  composition: Composition,
+  config: FrameSequenceExportConfig,
+): NormalizedFrameSequenceExportConfig {
+  const startTime = config.startTime ?? 0;
+  const endTime = config.endTime ?? composition.duration;
+  const frameRate = config.frameRate ?? composition.frameRate;
+  const frameStep = config.frameStep ?? 1;
+  const filenamePrefix = config.filenamePrefix ?? 'frame';
+  const filenamePadding = config.filenamePadding ?? 4;
+  const format = config.format ?? 'png';
+
+  validateExportTime(composition, startTime);
+  validateExportTime(composition, endTime);
+  validateFrameRate(frameRate);
+  validateFrameStep(frameStep);
+  validateFilenamePadding(filenamePadding);
+
+  if (endTime < startTime) {
+    throw validationError(
+      'INVALID_FRAME_SEQUENCE_RANGE',
+      'Frame sequence endTime must be greater than or equal to startTime.',
+      { propertyName: 'endTime', value: endTime },
+    );
+  }
+
+  const frameDuration = 1 / frameRate;
+  const totalFrameSlots = Math.floor((endTime - startTime) * frameRate) + 1;
+  const frameCount = totalFrameSlots <= 0 ? 0 : Math.ceil(totalFrameSlots / frameStep);
+  const frameConfig: FrameExportConfig = {
+    format,
+    ...(config.quality === undefined ? null : { quality: config.quality }),
+    ...(config.outputType === undefined ? null : { outputType: config.outputType }),
+  };
+
+  return {
+    startTime,
+    endTime,
+    frameRate,
+    frameDuration,
+    frameStep,
+    frameCount,
+    filenamePrefix,
+    filenamePadding,
+    extension: format === 'jpeg' ? 'jpg' : format,
+    frameConfig,
+    ...(config.onProgress === undefined ? null : { onProgress: config.onProgress }),
+  };
 }
 
 export function normalizeVideoExportConfig(
@@ -239,6 +348,35 @@ function validateFrameRate(frameRate: number): void {
       { propertyName: 'frameRate', value: frameRate },
     );
   }
+}
+
+function validateFrameStep(frameStep: number): void {
+  if (!Number.isInteger(frameStep) || frameStep <= 0) {
+    throw validationError(
+      'INVALID_FRAME_SEQUENCE_STEP',
+      'Frame sequence frameStep must be a positive integer.',
+      { propertyName: 'frameStep', value: frameStep },
+    );
+  }
+}
+
+function validateFilenamePadding(filenamePadding: number): void {
+  if (!Number.isInteger(filenamePadding) || filenamePadding < 0) {
+    throw validationError(
+      'INVALID_FRAME_SEQUENCE_PADDING',
+      'Frame sequence filenamePadding must be a non-negative integer.',
+      { propertyName: 'filenamePadding', value: filenamePadding },
+    );
+  }
+}
+
+function createFrameFilename(
+  prefix: string,
+  frameNumber: number,
+  padding: number,
+  extension: string,
+): string {
+  return `${prefix}${String(frameNumber).padStart(padding, '0')}.${extension}`;
 }
 
 function validateBitrate(bitrate: number): void {
