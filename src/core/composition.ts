@@ -17,6 +17,7 @@ import type {
   ScrawlCellAdapter,
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
+  ScrawlGroupAdapter,
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
@@ -35,6 +36,12 @@ const defaultScaleX = 1;
 const defaultScaleY = 1;
 const defaultAnchorX = 0;
 const defaultAnchorY = 0;
+
+interface CompositionInternals {
+  setHostGroup(group: ScrawlGroupAdapter | undefined): void;
+}
+
+const compositionInternals = new WeakMap<Composition, CompositionInternals>();
 
 function mergeTransform(transform?: Partial<Transform>): Transform {
   const position = transform?.position;
@@ -104,6 +111,22 @@ function syncPrecompositionLayer(
   layer.scrawlCell?.render?.();
 }
 
+function moveLayersIntoGroup(
+  layers: ReadonlyArray<Layer>,
+  targetGroup: ScrawlGroupAdapter,
+  previousGroup: ScrawlGroupAdapter | undefined,
+): void {
+  for (const layer of layers) {
+    if (targetGroup.moveArtefactsIntoGroup !== undefined) {
+      targetGroup.moveArtefactsIntoGroup(layer.scrawlEntity);
+      continue;
+    }
+
+    previousGroup?.removeArtefacts?.(layer.scrawlEntity);
+    targetGroup.addArtefacts?.(layer.scrawlEntity);
+  }
+}
+
 function attachLayerEffect(
   controller: ScrawlEffectsAdapter | undefined,
   layer: Layer,
@@ -165,18 +188,17 @@ export function createComposition(
   const normalized = normalizeCompositionConfig(config);
   const id = createId('composition');
   const timeline = adapters.createTimeline?.(normalized.duration) ?? new MemoryTimeline(normalized.duration);
-  const group = adapters.createGroup?.(normalized.name);
+  let activeGroup = adapters.createGroup?.(normalized.name);
   const effectsController = adapters.createEffectsController?.();
   const precompositionTimes = new WeakMap<Layer, number>();
   const registry = new EntityMappingRegistry(adapters.entityFactories);
-  const baseRuntime = {
+  const runtime: CompositionRuntime = {
     id,
     name: normalized.name,
     layers: [],
     timeline,
   };
-  const runtime: CompositionRuntime =
-    group === undefined ? baseRuntime : { ...baseRuntime, group };
+  if (activeGroup !== undefined) runtime.group = activeGroup;
 
   const composition = {
     id,
@@ -199,7 +221,7 @@ export function createComposition(
         config: layerConfig,
       };
       const groupedEntityContext =
-        group === undefined ? baseEntityContext : { ...baseEntityContext, group };
+        activeGroup === undefined ? baseEntityContext : { ...baseEntityContext, group: activeGroup };
       const entity = registry.createEntity(
         source === undefined ? groupedEntityContext : { ...groupedEntityContext, source },
       );
@@ -246,7 +268,7 @@ export function createComposition(
       parent?.children.push(layer);
       this.layers.push(layer);
       registry.register(layer, entity);
-      group?.addArtefacts?.(entity);
+      activeGroup?.addArtefacts?.(entity);
       syncLayerToScrawl(layer);
       for (const effect of layer.effects) attachLayerEffect(effectsController, layer, effect);
       applyLayerMask(effectsController, layer, layer.mask);
@@ -278,6 +300,8 @@ export function createComposition(
       if (layer.scrawlCell !== undefined) {
         layer.source = layer.scrawlCell.name;
         layer.scrawlEntity.set({ imageSource: layer.scrawlCell.name });
+        const cellGroup = layer.scrawlCell.getGroup?.();
+        if (cellGroup !== undefined) compositionInternals.get(childComposition)?.setHostGroup(cellGroup);
       }
 
       return layer;
@@ -350,7 +374,7 @@ export function createComposition(
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       detachMaskFeather(effectsController, layer);
       for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
-      group?.removeArtefacts?.(layer.scrawlEntity);
+      activeGroup?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);
       registry.unregister(layer);
@@ -397,6 +421,19 @@ export function createComposition(
       return serializeComposition(this);
     },
   } satisfies Composition;
+
+  compositionInternals.set(composition, {
+    setHostGroup(group: ScrawlGroupAdapter | undefined): void {
+      if (group === activeGroup) return;
+      const previousGroup = activeGroup;
+      activeGroup = group;
+      if (group === undefined) delete runtime.group;
+      else {
+        runtime.group = group;
+        moveLayersIntoGroup(runtime.layers, group, previousGroup);
+      }
+    },
+  });
 
   return composition;
 }

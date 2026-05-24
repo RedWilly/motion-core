@@ -202,13 +202,26 @@ describe('createComposition', () => {
   test('creates precomposition layers backed by adapter Cells and syncs child time', () => {
     const cellCalls: string[] = [];
     const child = createComposition({ width: 64, height: 48, duration: 10 });
+    const childLayer = child.addLayer('shape', undefined, { name: 'child-box' });
     const composition = createComposition(
       { width: 100, height: 100 },
       {
         createPrecompositionCell(context) {
           cellCalls.push(`${context.layerName}:${context.composition.width}x${context.composition.height}`);
+          const cellGroup = {
+            name: `${context.layerName}-cell`,
+            moveArtefactsIntoGroup(entity) {
+              cellCalls.push(`move:${entity.name}`);
+            },
+            addArtefacts(entity) {
+              cellCalls.push(`add:${entity.name}`);
+            },
+          };
           return {
             name: `${context.layerName}-cell`,
+            getGroup() {
+              return cellGroup;
+            },
             render() {
               cellCalls.push('render-cell');
             },
@@ -224,13 +237,19 @@ describe('createComposition', () => {
     });
     composition.seek(3);
     composition.seek(3);
+    const lateChildLayer = child.addLayer('shape', undefined, { name: 'late-child-box' });
 
     expect(layer.type).toBe('precomp');
     expect(layer.source).toBe('nested-cell');
     expect(layer.precomposition).toBe(child);
     expect(layer.scrawlCell?.name).toBe('nested-cell');
     expect(child.timeline.time()).toBe(4);
-    expect(cellCalls).toEqual(['nested:64x48', 'render-cell']);
+    expect(cellCalls).toEqual([
+      'nested:64x48',
+      `move:${childLayer.scrawlEntity.name}`,
+      'render-cell',
+      `add:${lateChildLayer.scrawlEntity.name}`,
+    ]);
   });
 
   test('rejects circular precomposition references', () => {

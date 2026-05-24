@@ -289,9 +289,12 @@ const childTime = (3 - 1) * 1.5;
 
 The engine clamps that value to the child composition duration, seeks the child composition, and renders the precomp Cell when the computed child time changes. Circular precomposition references throw a validation error.
 
-Current limitation:
+Current behavior:
 
-- The API allocates and tracks the Scrawl Cell through the adapter, and it synchronizes child time. Full visual rendering of child composition contents into that Cell depends on the adapter/render pipeline hosting the child entities in the Cell. The current browser adapter creates the Cell but does not yet expose a high-level API for authoring the child directly into that Cell.
+- The API allocates and tracks the Scrawl Cell through the adapter.
+- When the Cell exposes its namesake Group, the child composition is rehosted into that Group so existing and future child layers compile into the precomp Cell.
+- The parent precomp layer uses the Cell name as its Picture source.
+- Child timeline sync is cached so repeated parent seeks to the same child time do not re-render the Cell.
 
 ## Serialization
 

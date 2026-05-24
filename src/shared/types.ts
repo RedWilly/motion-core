@@ -283,6 +283,7 @@ export interface ScrawlEntityAdapter {
 export interface ScrawlGroupAdapter {
   readonly name: string;
   addArtefacts?(...entities: Array<ScrawlEntityAdapter | string>): unknown;
+  moveArtefactsIntoGroup?(...entities: Array<ScrawlEntityAdapter | string>): unknown;
   removeArtefacts?(...entities: Array<ScrawlEntityAdapter | string>): unknown;
   setArtefacts?(values: Record<string, unknown>): unknown;
   addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
@@ -303,6 +304,7 @@ export interface ScrawlFilterAdapter {
 
 export interface ScrawlCellAdapter {
   readonly name: string;
+  getGroup?(): ScrawlGroupAdapter;
   set?(values: Readonly<Record<string, unknown>>): unknown;
   kill?(): unknown;
   render?(): unknown;
