@@ -230,12 +230,16 @@ Current behavior:
 
 - The target layer stores `mask.sourceLayerId`.
 - The default strategy is `cell`.
-- The matte/source layer is hidden so it does not draw as a normal visible layer.
+- The browser adapter creates a Scrawl layer Cell for the mask pair when Cell support is available.
+- The target and matte entities are moved into the Cell's namesake Group.
+- The target stamps first, and the matte stamps after it with `destination-in` when `mode: 'clip'`.
+- The Cell output stamps back into the base display at the target layer's order.
+- `feather` adds a Scrawl `gaussian-blur` filter to the matte entity.
 - The relationship survives serialization.
 
 Current limitation:
 
-- The engine does not yet implement a full Cell compositing pass that visually combines arbitrary source and target layers. That is the next renderer-level step if layer-to-layer masks must produce final pixels automatically.
+- If an adapter does not expose layer Cell creation, the engine still records the relationship and hides the matte/source layer, but it cannot produce visual Cell compositing in that runtime.
 
 ## Precomposition
 

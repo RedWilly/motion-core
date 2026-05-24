@@ -191,6 +191,26 @@ export function createBrowserScrawlAdapter(
         setRelativeDimensionsUsingBase: false,
       });
     },
+    createLayerMaskCell(context) {
+      if (!canvas.buildCell) {
+        throw capabilityError(
+          'SCRAWL_CELL_FACTORY_MISSING',
+          'Scrawl canvas does not expose buildCell().',
+          'Use a Scrawl-canvas Canvas artefact capable of creating layer Cells.',
+        );
+      }
+
+      return canvas.buildCell({
+        name: `${namespace}-${context.targetLayer.name}-mask-cell`,
+        dimensions: [context.composition.width, context.composition.height],
+        shown: true,
+        compiled: true,
+        cleared: true,
+        compileOrder: context.targetLayer.zIndex,
+        showOrder: context.targetLayer.zIndex,
+        setRelativeDimensionsUsingBase: false,
+      });
+    },
     createEffectsController() {
       return createScrawlEffectsController(scrawl, { namespace });
     },

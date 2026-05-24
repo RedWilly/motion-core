@@ -211,6 +211,8 @@ export interface LayerMaskState extends Required<Pick<ScrawlMaskConfig, 'mode'>>
   readonly feather?: number;
   readonly memoize?: boolean;
   scrawlFilter?: ScrawlFilterAdapter;
+  scrawlFilterTarget?: ScrawlEntityAdapter | ScrawlGroupAdapter;
+  scrawlCell?: ScrawlCellAdapter;
 }
 
 export interface ScrawlEffectHandle {
@@ -374,6 +376,7 @@ export interface EngineAdapters {
   createRenderer?: (composition: CompositionRuntime) => RenderAdapter;
   createGroup?: (compositionName: string) => ScrawlGroupAdapter | undefined;
   createPrecompositionCell?: (context: PrecompositionCellFactoryContext) => ScrawlCellAdapter | undefined;
+  createLayerMaskCell?: (context: LayerMaskCellFactoryContext) => ScrawlCellAdapter | undefined;
   createEffectsController?: () => ScrawlEffectsAdapter | undefined;
   entityFactories?: Partial<Record<LayerType, LayerEntityFactory>>;
   importScrawlPacket?: (packet: string) => unknown;
@@ -385,9 +388,18 @@ export interface PrecompositionCellFactoryContext {
   readonly layerName: string;
 }
 
+export interface LayerMaskCellFactoryContext {
+  readonly composition: CompositionRuntime;
+  readonly targetLayer: Layer;
+  readonly sourceLayer: Layer;
+  readonly mask: LayerMaskState;
+}
+
 export interface CompositionRuntime {
   id: string;
   name: string;
+  width: number;
+  height: number;
   group?: ScrawlGroupAdapter;
   layers: Layer[];
   timeline: TimelineAdapter;

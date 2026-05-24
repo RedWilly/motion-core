@@ -127,6 +127,14 @@ function moveLayersIntoGroup(
   }
 }
 
+function findLayerById(layers: ReadonlyArray<Layer>, id: string | undefined): Layer | undefined {
+  if (id === undefined) return undefined;
+  for (const layer of layers) {
+    if (layer.id === id) return layer;
+  }
+  return undefined;
+}
+
 function attachLayerEffect(
   controller: ScrawlEffectsAdapter | undefined,
   layer: Layer,
@@ -172,13 +180,88 @@ function detachMaskFeather(
 ): void {
   const filter = layer.mask?.scrawlFilter;
   if (filter === undefined) return;
+  const target = layer.mask?.scrawlFilterTarget ?? layer.scrawlEntity;
 
   if (controller !== undefined) {
-    controller.removeEffect(layer.scrawlEntity, { id: filter.name, filter });
+    controller.removeEffect(target, { id: filter.name, filter });
   } else {
     filter.kill?.();
   }
   delete layer.mask?.scrawlFilter;
+  delete layer.mask?.scrawlFilterTarget;
+}
+
+function attachLayerMaskCell(
+  adapters: EngineAdapters,
+  controller: ScrawlEffectsAdapter | undefined,
+  runtime: CompositionRuntime,
+  targetLayer: Layer,
+  sourceLayer: Layer,
+  mask: LayerMaskState,
+  activeGroup: ScrawlGroupAdapter | undefined,
+): void {
+  if (mask.strategy !== 'cell') return;
+  const cell = adapters.createLayerMaskCell?.({
+    composition: runtime,
+    targetLayer,
+    sourceLayer,
+    mask,
+  });
+  const cellGroup = cell?.getGroup?.();
+  if (cell === undefined || cellGroup === undefined) return;
+
+  moveLayersIntoGroup([targetLayer, sourceLayer], cellGroup, activeGroup);
+  targetLayer.scrawlEntity.set({
+    visibility: targetLayer.visible,
+    globalCompositeOperation: 'source-over',
+    globalAlpha: targetLayer.opacity,
+    order: 0,
+  });
+  sourceLayer.scrawlEntity.set({
+    visibility: true,
+    globalCompositeOperation: mask.mode === 'clip' ? 'destination-in' : mask.mode,
+    globalAlpha: mask.opacity ?? 1,
+    order: 1,
+  });
+
+  if (mask.feather !== undefined && mask.feather > 0 && controller !== undefined) {
+    const handle = controller.addEffect(sourceLayer.scrawlEntity, {
+      id: `${targetLayer.id}-layer-mask-feather`,
+      actions: [{ action: 'gaussian-blur', radius: mask.feather }],
+    });
+    mask.scrawlFilter = handle.filter;
+    mask.scrawlFilterTarget = sourceLayer.scrawlEntity;
+  }
+
+  mask.scrawlCell = cell;
+}
+
+function detachLayerMaskCell(
+  targetLayer: Layer,
+  sourceLayer: Layer | undefined,
+  activeGroup: ScrawlGroupAdapter | undefined,
+): void {
+  const cell = targetLayer.mask?.scrawlCell;
+  if (cell === undefined) return;
+
+  const layers = sourceLayer === undefined ? [targetLayer] : [targetLayer, sourceLayer];
+  if (activeGroup !== undefined) moveLayersIntoGroup(layers, activeGroup, cell.getGroup?.());
+  targetLayer.scrawlEntity.set({
+    globalCompositeOperation: 'source-over',
+    globalAlpha: targetLayer.opacity,
+    visibility: targetLayer.visible,
+  });
+
+  if (sourceLayer !== undefined) {
+    sourceLayer.scrawlEntity.set({
+      globalCompositeOperation: 'source-over',
+      globalAlpha: sourceLayer.opacity,
+      visibility: sourceLayer.visible,
+    });
+  }
+
+  cell.kill?.();
+  delete targetLayer.mask?.scrawlCell;
 }
 
 export function createComposition(
@@ -195,6 +278,8 @@ export function createComposition(
   const runtime: CompositionRuntime = {
     id,
     name: normalized.name,
+    width: normalized.width,
+    height: normalized.height,
     layers: [],
     timeline,
   };
@@ -333,6 +418,7 @@ export function createComposition(
     },
 
     setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
+      detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
       detachMaskFeather(effectsController, layer);
       const mask = normalizeScrawlMaskConfig(config) as LayerMaskState;
 
@@ -351,11 +437,13 @@ export function createComposition(
         sourceLayerId: sourceLayer.id,
         strategy: config.strategy ?? 'cell',
       });
-      sourceLayer.scrawlEntity.set({ visibility: false });
+      attachLayerMaskCell(adapters, effectsController, runtime, targetLayer, sourceLayer, mask, activeGroup);
+      if (mask.scrawlCell === undefined) sourceLayer.scrawlEntity.set({ visibility: false });
       return mask;
     },
 
     clearMask(layer: Layer): void {
+      detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
       detachMaskFeather(effectsController, layer);
       layer.mask = null;
     },
@@ -372,6 +460,7 @@ export function createComposition(
 
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
+      this.clearMask(layer);
       detachMaskFeather(effectsController, layer);
       for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
       activeGroup?.removeArtefacts?.(layer.scrawlEntity);

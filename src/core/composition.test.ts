@@ -178,21 +178,51 @@ describe('createComposition', () => {
 
   test('records layer-to-layer mask workflow without attaching unsafe entity clipping', () => {
     const { adapter, calls } = createFakeEffectsAdapter();
+    const maskCellCalls: string[] = [];
     const composition = createComposition(
       { width: 100, height: 100 },
-      { createEffectsController: () => adapter },
+      {
+        createEffectsController: () => adapter,
+        createLayerMaskCell(context) {
+          maskCellCalls.push(`${context.targetLayer.name}:${context.sourceLayer.name}:${context.composition.width}x${context.composition.height}`);
+          const cellGroup = {
+            name: `${context.targetLayer.name}-mask-cell`,
+            moveArtefactsIntoGroup(entity) {
+              maskCellCalls.push(`move:${entity.name}`);
+            },
+          };
+          return {
+            name: `${context.targetLayer.name}-mask-cell`,
+            getGroup() {
+              return cellGroup;
+            },
+            kill() {
+              maskCellCalls.push('kill-cell');
+            },
+          };
+        },
+      },
     );
     const target = composition.addLayer('shape', undefined, { name: 'target' });
     const matte = composition.addLayer('shape', undefined, { name: 'matte' });
 
     const mask = composition.setLayerMask(target, matte, { mode: 'clip', feather: 2 });
 
-    expect(mask).toEqual({ mode: 'clip', strategy: 'cell', sourceLayerId: matte.id, feather: 2 });
+    expect(mask).toMatchObject({ mode: 'clip', strategy: 'cell', sourceLayerId: matte.id, feather: 2 });
     expect(target.mask).toBe(mask);
-    expect(calls).toEqual([]);
+    expect(mask.scrawlCell?.name).toBe('target-mask-cell');
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain('layer-mask-feather');
+    expect(calls[1]).toContain('layer-mask-feather');
+    expect(maskCellCalls).toEqual([
+      'target:matte:100x100',
+      `move:${target.scrawlEntity.name}`,
+      `move:${matte.scrawlEntity.name}`,
+    ]);
 
     composition.clearMask(target);
     expect(target.mask).toBeNull();
+    expect(maskCellCalls).toContain('kill-cell');
 
     composition.setLayerMask(target, matte, { mode: 'clip' });
     composition.removeLayer(matte);
