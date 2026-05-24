@@ -15,6 +15,7 @@ type CanvasFit = 'none' | 'contain' | 'cover' | 'fill';
 interface ScrawlCanvasAdapter {
   readonly name: string;
   readonly base?: { readonly name: string };
+  readonly element?: HTMLCanvasElement;
   set(values: Readonly<Record<string, unknown>>): unknown;
   render(): unknown;
 }
@@ -54,10 +55,12 @@ export interface BrowserScrawlAdapter extends EngineAdapters {
 
 class BrowserScrawlRenderer implements RenderAdapter {
   private readonly canvas: ScrawlCanvasAdapter;
+  private readonly element: HTMLCanvasElement;
   private readonly render: ScrawlRenderAdapter;
 
-  constructor(canvas: ScrawlCanvasAdapter, render: ScrawlRenderAdapter) {
+  constructor(canvas: ScrawlCanvasAdapter, element: HTMLCanvasElement, render: ScrawlRenderAdapter) {
     this.canvas = canvas;
+    this.element = element;
     this.render = render;
   }
 
@@ -71,6 +74,23 @@ class BrowserScrawlRenderer implements RenderAdapter {
 
   renderFrame(): void {
     this.canvas.render();
+  }
+
+  async captureFrame(options: Readonly<{ mimeType: string; quality?: number }>): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      this.element.toBlob(
+        (blob) => {
+          if (blob === null) {
+            reject(capabilityError('CANVAS_CAPTURE_FAILED', 'Canvas did not produce a frame blob.'));
+            return;
+          }
+
+          resolve(blob);
+        },
+        options.mimeType,
+        options.quality,
+      );
+    });
   }
 
   kill(): void {
@@ -131,7 +151,8 @@ export function createBrowserScrawlAdapter(
   options: BrowserScrawlAdapterOptions,
 ): BrowserScrawlAdapter {
   const namespace = options.namespace ?? 'motion';
-  const canvas = resolveScrawlCanvas(scrawl, options.canvas, namespace, options);
+  const element = requireCanvasElement(options.canvas);
+  const canvas = resolveScrawlCanvas(scrawl, element, namespace, options);
   scrawl.setCurrentCanvas?.(canvas);
 
   let renderer: BrowserScrawlRenderer | undefined;
@@ -147,7 +168,7 @@ export function createBrowserScrawlAdapter(
         target: canvas.name,
         maxFrameRate: 0,
       });
-      renderer = new BrowserScrawlRenderer(canvas, render);
+      renderer = new BrowserScrawlRenderer(canvas, element, render);
       return renderer;
     },
     renderFrame(): void {

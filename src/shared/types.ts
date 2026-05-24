@@ -153,6 +153,12 @@ export interface RenderAdapter {
   play(): void;
   pause(): void;
   renderFrame(): void | Promise<void>;
+  captureFrame?(options: Readonly<FrameCaptureOptions>): Promise<Blob>;
+}
+
+export interface FrameCaptureOptions {
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  quality?: number;
 }
 
 export interface TimelineAdapter {
