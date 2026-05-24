@@ -62,4 +62,83 @@ describe('AnimationController', () => {
 
     expect(layer.transform.position.x).toBe(0);
   });
+
+  test('evaluates expressions with time, frame, layer, and helper context', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5, frameRate: 24 });
+    const layer = composition.addLayer('shape', undefined, {
+      name: 'box',
+      transform: { position: { x: 10, y: 0 } },
+    });
+    const controller = createAnimationController(composition);
+
+    controller.setExpression(layer, 'position.x', 'clamp(value + time + frame + layer.transform.position.y, 0, 100)');
+    const result = controller.applyExpressions(1);
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.applied).toBe(1);
+    expect(layer.transform.position.x).toBe(35);
+    expect(layer.scrawlState.startX).toBe(35);
+  });
+
+  test('lets expressions consume audio analysis data', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5 });
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+
+    controller.setExpression(layer, 'opacity', 'audio.amplitude * audio.bands.bass');
+    controller.applyExpressions(0, {
+      amplitude: 0.5,
+      bands: { bass: 0.8, mid: 0.2, treble: 0.1 },
+    });
+
+    expect(layer.opacity).toBeCloseTo(0.4);
+    expect(layer.scrawlState.globalAlpha).toBeCloseTo(0.4);
+  });
+
+  test('keeps the last valid expression value after evaluation errors', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5 });
+    const layer = composition.addLayer('shape', undefined, {
+      transform: { position: { x: 2, y: 0 } },
+    });
+    const controller = createAnimationController(composition);
+
+    controller.setExpression(layer, 'position.x', 'time < 1 ? 20 : missing.value');
+    expect(controller.applyExpressions(0).errors).toHaveLength(0);
+    expect(layer.transform.position.x).toBe(20);
+
+    const result = controller.applyExpressions(1);
+
+    expect(result.applied).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.message).toContain('position.x');
+    expect(result.errors[0]?.message).toContain('missing.value');
+    expect(layer.transform.position.x).toBe(20);
+  });
+
+  test('supports deterministic random and wiggle helpers', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5 });
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+
+    controller.setExpression(layer, 'rotation', 'random(10, 20, 3) + wiggle(2, 5, 1)');
+    controller.applyExpressions(0.5);
+    const first = layer.transform.rotation;
+    controller.applyExpressions(0.5);
+    const second = layer.transform.rotation;
+
+    expect(second).toBe(first);
+  });
+
+  test('removes expressions without touching existing property values', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 5 });
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+
+    controller.setExpression(layer, 'rotation', '30');
+    controller.applyExpressions(0);
+    controller.removeExpression(layer, 'rotation');
+    controller.applyExpressions(1);
+
+    expect(layer.transform.rotation).toBe(30);
+  });
 });
