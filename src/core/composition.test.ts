@@ -28,4 +28,26 @@ describe('createComposition', () => {
     expect(composition.layers).not.toContain(parent);
     expect(composition.layers).not.toContain(child);
   });
+
+  test('maps child layers to Scrawl pivot and mimic state', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const parent = composition.addLayer('shape', undefined, {
+      name: 'parent',
+      transform: { position: { x: 40, y: 50 }, rotation: 15, scale: { x: 2, y: 2 } },
+    });
+    const child = composition.addLayer('shape', undefined, {
+      name: 'child',
+      parent,
+      transform: { position: { x: 10, y: 20 }, rotation: 5, scale: { x: 1.25, y: 1.25 } },
+    });
+
+    expect(child.scrawlState.lockTo).toBe('pivot');
+    expect(child.scrawlState.pivot).toBe(parent.scrawlEntity.name);
+    expect(child.scrawlState.mimic).toBe(parent.scrawlEntity.name);
+    expect(child.scrawlState.offsetX).toBe(10);
+    expect(child.scrawlState.offsetY).toBe(20);
+    expect(child.scrawlState.addPivotRotation).toBe(true);
+    expect(child.scrawlState.useMimicScale).toBe(true);
+    expect(child.scrawlState.scale).toBe(0.25);
+  });
 });

@@ -1,3 +1,4 @@
+export * from './browser-scrawl-adapter';
 export * from './entity-mapping';
 export * from './gsap-adapter';
 export * from './scrawl-factories';

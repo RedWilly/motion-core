@@ -53,6 +53,8 @@ function createScrawlState(transform: Transform, opacity: number, visible: boole
   return {
     startX: transform.position.x,
     startY: transform.position.y,
+    offsetX: 0,
+    offsetY: 0,
     roll: transform.rotation,
     scale: transform.scale.x,
     handleX: transform.anchor.x,

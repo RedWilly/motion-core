@@ -18,11 +18,37 @@ export interface SynchronizationOptions {
 export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
   const transform = layer.transform;
   const state = layer.scrawlState;
+  const parent = layer.parent;
 
-  state.startX = transform.position.x;
-  state.startY = transform.position.y;
+  if (parent) {
+    state.startX = 0;
+    state.startY = 0;
+    state.offsetX = transform.position.x;
+    state.offsetY = transform.position.y;
+    state.lockTo = 'pivot';
+    state.pivot = parent.scrawlEntity.name;
+    state.addPivotRotation = true;
+    state.addPivotOffset = true;
+    state.mimic = parent.scrawlEntity.name;
+    state.useMimicScale = true;
+    state.addOwnScaleToMimic = true;
+    state.scale = transform.scale.x - 1;
+  } else {
+    state.startX = transform.position.x;
+    state.startY = transform.position.y;
+    state.offsetX = 0;
+    state.offsetY = 0;
+    state.lockTo = 'start';
+    delete state.pivot;
+    delete state.addPivotRotation;
+    delete state.addPivotOffset;
+    delete state.mimic;
+    delete state.useMimicScale;
+    delete state.addOwnScaleToMimic;
+    state.scale = transform.scale.x;
+  }
+
   state.roll = transform.rotation;
-  state.scale = transform.scale.x;
   state.handleX = transform.anchor.x;
   state.handleY = transform.anchor.y;
   state.globalAlpha = layer.opacity;

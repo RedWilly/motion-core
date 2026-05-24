@@ -1,0 +1,175 @@
+import { capabilityError } from '../shared/errors';
+import type {
+  CompositionRuntime,
+  EngineAdapters,
+  RenderAdapter,
+  ScrawlGroupAdapter,
+} from '../shared/types';
+import {
+  createScrawlEntityFactories,
+  type ScrawlFactoryModule,
+} from './scrawl-factories';
+
+type CanvasFit = 'none' | 'contain' | 'cover' | 'fill';
+
+interface ScrawlCanvasAdapter {
+  readonly name: string;
+  readonly base?: { readonly name: string };
+  set(values: Readonly<Record<string, unknown>>): unknown;
+  render(): unknown;
+}
+
+interface ScrawlRenderAdapter {
+  run(): unknown;
+  halt(): unknown;
+  isRunning(): boolean;
+  kill?(): unknown;
+}
+
+export interface ScrawlBrowserModule extends ScrawlFactoryModule {
+  addCanvas(items?: Readonly<Record<string, unknown>>): ScrawlCanvasAdapter;
+  findCanvas(name: string): ScrawlCanvasAdapter | undefined;
+  getCanvas(name: string): ScrawlCanvasAdapter | undefined;
+  makeRender(items: Readonly<Record<string, unknown>>): ScrawlRenderAdapter;
+  purge(namespace: string): void;
+  setCurrentCanvas?(canvas: ScrawlCanvasAdapter | string): void;
+}
+
+export interface BrowserScrawlAdapterOptions {
+  canvas: HTMLCanvasElement | string;
+  namespace?: string;
+  fit?: CanvasFit;
+  backgroundColor?: string;
+  title?: string;
+  label?: string;
+  description?: string;
+}
+
+export interface BrowserScrawlAdapter extends EngineAdapters {
+  readonly namespace: string;
+  readonly canvas: ScrawlCanvasAdapter;
+  renderFrame(): void;
+  dispose(): void;
+}
+
+class BrowserScrawlRenderer implements RenderAdapter {
+  private readonly canvas: ScrawlCanvasAdapter;
+  private readonly render: ScrawlRenderAdapter;
+
+  constructor(canvas: ScrawlCanvasAdapter, render: ScrawlRenderAdapter) {
+    this.canvas = canvas;
+    this.render = render;
+  }
+
+  play(): void {
+    if (!this.render.isRunning()) this.render.run();
+  }
+
+  pause(): void {
+    if (this.render.isRunning()) this.render.halt();
+  }
+
+  renderFrame(): void {
+    this.canvas.render();
+  }
+
+  kill(): void {
+    this.render.kill?.();
+  }
+}
+
+function requireCanvasElement(canvas: HTMLCanvasElement | string): HTMLCanvasElement {
+  if (typeof canvas !== 'string') return canvas;
+
+  const element = globalThis.document?.getElementById(canvas);
+  if (element instanceof HTMLCanvasElement) return element;
+
+  throw capabilityError(
+    'SCROLL_CANVAS_ELEMENT_MISSING',
+    `Unable to find canvas element "${canvas}".`,
+    'Pass an existing HTMLCanvasElement or an id for a canvas already in the document.',
+  );
+}
+
+function resolveScrawlCanvas(
+  scrawl: ScrawlBrowserModule,
+  canvasInput: HTMLCanvasElement | string,
+  namespace: string,
+  options: BrowserScrawlAdapterOptions,
+): ScrawlCanvasAdapter {
+  const element = requireCanvasElement(canvasInput);
+  if (!element.id) element.id = `${namespace}-canvas`;
+
+  const existing = scrawl.findCanvas(element.id) ?? scrawl.getCanvas(element.id);
+  if (existing) return existing;
+
+  return scrawl.addCanvas({
+    name: element.id,
+    element,
+    fit: options.fit ?? 'contain',
+    backgroundColor: options.backgroundColor,
+    title: options.title,
+    label: options.label,
+    description: options.description,
+  });
+}
+
+function createGroupFactory(
+  scrawl: ScrawlBrowserModule,
+  canvas: ScrawlCanvasAdapter,
+  namespace: string,
+) {
+  return (compositionName: string): ScrawlGroupAdapter => {
+    const groupName = `${namespace}-${compositionName}-main-group`;
+    const host = canvas.base?.name ?? canvas.name;
+    return scrawl.makeGroup({ name: groupName, host });
+  };
+}
+
+export function createBrowserScrawlAdapter(
+  scrawl: ScrawlBrowserModule,
+  options: BrowserScrawlAdapterOptions,
+): BrowserScrawlAdapter {
+  const namespace = options.namespace ?? 'motion';
+  const canvas = resolveScrawlCanvas(scrawl, options.canvas, namespace, options);
+  scrawl.setCurrentCanvas?.(canvas);
+
+  let renderer: BrowserScrawlRenderer | undefined;
+
+  return {
+    namespace,
+    canvas,
+    entityFactories: createScrawlEntityFactories(scrawl, { namespace }),
+    createGroup: createGroupFactory(scrawl, canvas, namespace),
+    createRenderer(composition: CompositionRuntime): RenderAdapter {
+      const render = scrawl.makeRender({
+        name: `${namespace}-${composition.name}-render`,
+        target: canvas.name,
+        maxFrameRate: 0,
+      });
+      renderer = new BrowserScrawlRenderer(canvas, render);
+      return renderer;
+    },
+    renderFrame(): void {
+      canvas.render();
+    },
+    dispose(): void {
+      renderer?.kill();
+      scrawl.purge(namespace);
+    },
+  };
+}
+
+export async function loadBrowserScrawlAdapter(
+  options: BrowserScrawlAdapterOptions,
+): Promise<BrowserScrawlAdapter> {
+  if (typeof globalThis.window === 'undefined' || typeof globalThis.document === 'undefined') {
+    throw capabilityError(
+      'BROWSER_REQUIRED',
+      'Scrawl-canvas browser adapter requires a DOM window and document.',
+    );
+  }
+
+  const scrawl = (await import('scrawl-canvas')) as unknown as ScrawlBrowserModule;
+  return createBrowserScrawlAdapter(scrawl, options);
+}

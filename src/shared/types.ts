@@ -42,9 +42,22 @@ export interface LayerConfig {
   parent?: Layer;
   content?: unknown;
   scaleMode?: 'fill' | 'fit' | 'none';
+  shape?: ShapeLayerConfig;
   scrawl?: Readonly<Record<string, unknown>>;
+  textMode?: 'label' | 'enhanced';
   text?: string;
   variant?: 'emitter' | 'net' | 'tracer';
+}
+
+export interface ShapeLayerConfig {
+  kind?: 'block' | 'wheel' | 'rectangle' | 'shape';
+  width?: number | string;
+  height?: number | string;
+  radius?: number | string;
+  path?: string;
+  fillStyle?: string;
+  strokeStyle?: string;
+  method?: string;
 }
 
 export interface Layer {
@@ -67,12 +80,21 @@ export interface Layer {
 export interface ScrawlTransformState {
   startX: number;
   startY: number;
+  offsetX: number;
+  offsetY: number;
   roll: number;
   scale: number;
   handleX: number;
   handleY: number;
   globalAlpha: number;
   visibility: boolean;
+  lockTo?: 'start' | 'pivot';
+  pivot?: string;
+  addPivotRotation?: boolean;
+  addPivotOffset?: boolean;
+  mimic?: string;
+  useMimicScale?: boolean;
+  addOwnScaleToMimic?: boolean;
   [key: string]: unknown;
 }
 

@@ -11,11 +11,24 @@ type ScrawlFactory = (items: Record<string, unknown>) => ScrawlEntityAdapter;
 export interface ScrawlFactoryModule {
   makeBlock: ScrawlFactory;
   makeEmitter: ScrawlFactory;
+  makeEnhancedLabel: ScrawlFactory;
   makeGroup: (items: Record<string, unknown>) => ScrawlGroupAdapter;
   makeLabel: ScrawlFactory;
   makeNet: ScrawlFactory;
   makePicture: ScrawlFactory;
+  makeRectangle: ScrawlFactory;
+  makeShape: ScrawlFactory;
   makeTracer: ScrawlFactory;
+  makeWheel: ScrawlFactory;
+}
+
+export interface ScrawlEntityFactoryOptions {
+  namespace?: string;
+}
+
+function namespacedName(namespace: string | undefined, name: string): string {
+  if (!namespace || name.startsWith(`${namespace}-`)) return name;
+  return `${namespace}-${name}`;
 }
 
 function baseEntityConfig(context: LayerEntityFactoryContext): Record<string, unknown> {
@@ -23,6 +36,33 @@ function baseEntityConfig(context: LayerEntityFactoryContext): Record<string, un
     name: context.name,
     group: context.group,
     ...(context.config.scrawl ?? null),
+  };
+}
+
+function shapeFactory(scrawl: ScrawlFactoryModule): LayerEntityFactory {
+  return (context) => {
+    const config = context.config.shape;
+    const base = {
+      ...baseEntityConfig(context),
+      width: config?.width,
+      height: config?.height,
+      radius: config?.radius,
+      pathDefinition: config?.path,
+      fillStyle: config?.fillStyle,
+      strokeStyle: config?.strokeStyle,
+      method: config?.method ?? 'fill',
+    };
+
+    switch (config?.kind ?? 'block') {
+      case 'wheel':
+        return scrawl.makeWheel(base);
+      case 'rectangle':
+        return scrawl.makeRectangle(base);
+      case 'shape':
+        return scrawl.makeShape(base);
+      case 'block':
+        return scrawl.makeBlock(base);
+    }
   };
 }
 
@@ -48,23 +88,29 @@ function particleFactory(scrawl: ScrawlFactoryModule): LayerEntityFactory {
 
 export function createScrawlEntityFactories(
   scrawl: ScrawlFactoryModule,
+  options: ScrawlEntityFactoryOptions = {},
 ): Partial<Record<LayerType, LayerEntityFactory>> {
+  const wrapContext = (context: LayerEntityFactoryContext): LayerEntityFactoryContext => {
+    const name = namespacedName(options.namespace, context.name);
+    return name === context.name ? context : { ...context, name };
+  };
+
   return {
-    image: pictureFactory(scrawl, 'imageSource'),
-    video: pictureFactory(scrawl, 'videoSource'),
-    svg: pictureFactory(scrawl, 'imageSource'),
-    shape: (context) => scrawl.makeBlock(baseEntityConfig(context)),
+    image: (context) => pictureFactory(scrawl, 'imageSource')(wrapContext(context)),
+    video: (context) => pictureFactory(scrawl, 'videoSource')(wrapContext(context)),
+    svg: (context) => pictureFactory(scrawl, 'imageSource')(wrapContext(context)),
+    shape: (context) => shapeFactory(scrawl)(wrapContext(context)),
     text: (context) =>
-      scrawl.makeLabel({
-        ...baseEntityConfig(context),
-        text: context.config.text ?? '',
-      }),
-    particle: particleFactory(scrawl),
-    precomp: (context) => scrawl.makePicture(baseEntityConfig(context)),
+      (context.config.textMode === 'enhanced' ? scrawl.makeEnhancedLabel : scrawl.makeLabel)({
+          ...baseEntityConfig(wrapContext(context)),
+          text: context.config.text ?? '',
+        }),
+    particle: (context) => particleFactory(scrawl)(wrapContext(context)),
+    precomp: (context) => scrawl.makePicture(baseEntityConfig(wrapContext(context))),
   };
 }
 
-export function createScrawlGroupFactory(scrawl: ScrawlFactoryModule) {
+export function createScrawlGroupFactory(scrawl: ScrawlFactoryModule, options: ScrawlEntityFactoryOptions = {}) {
   return (compositionName: string): ScrawlGroupAdapter =>
-    scrawl.makeGroup({ name: `${compositionName}-main-group` });
+    scrawl.makeGroup({ name: namespacedName(options.namespace, `${compositionName}-main-group`) });
 }
