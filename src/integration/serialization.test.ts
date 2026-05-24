@@ -131,7 +131,7 @@ describe('serialization', () => {
         actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
       },
     ]);
-    expect(hydrated.layers[1]?.mask).toEqual({ mode: 'clip', feather: 1 });
+    expect(hydrated.layers[1]?.mask).toEqual({ mode: 'clip', strategy: 'entity', feather: 1 });
     expect(hydrated.timeline.time()).toBe(1);
     expect(packets).toHaveLength(2);
   });
@@ -148,5 +148,27 @@ describe('serialization', () => {
 
     expect(hydrated.width).toBe(10);
     expect(hydrated.height).toBe(10);
+  });
+
+  test('serializes effects and layer mask relationships added through the core API', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const target = composition.addLayer('shape', undefined, { name: 'target' });
+    const matte = composition.addLayer('shape', undefined, { name: 'matte' });
+    composition.addEffect(target, { id: 'soft', actions: [{ action: 'gaussian-blur', radiusHorizontal: 3 }] });
+    composition.setLayerMask(target, matte, { mode: 'clip', feather: 2 });
+
+    const payload = parseSerializedComposition(serializeComposition(composition));
+    const hydrated = deserializeComposition(serializeComposition(composition));
+
+    expect(payload.layers[0]?.config?.effects).toEqual([
+      { id: 'soft', actions: [{ action: 'gaussian-blur', radiusHorizontal: 3 }] },
+    ]);
+    expect(payload.layers[0]?.config?.mask).toEqual({
+      mode: 'clip',
+      strategy: 'cell',
+      sourceLayerId: matte.id,
+      feather: 2,
+    });
+    expect(hydrated.layers[0]?.mask?.sourceLayerId).toBe(hydrated.layers[1]?.id);
   });
 });

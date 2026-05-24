@@ -50,7 +50,7 @@ export interface LayerConfig {
   text?: string;
   variant?: 'emitter' | 'net' | 'tracer';
   effects?: readonly ScrawlEffectConfig[];
-  mask?: ScrawlMaskConfig;
+  mask?: LayerMaskConfig;
 }
 
 export interface ShapeLayerConfig {
@@ -183,12 +183,21 @@ export interface ScrawlMaskConfig {
   readonly memoize?: boolean;
 }
 
+export type LayerMaskStrategy = 'entity' | 'cell';
+
+export interface LayerMaskConfig extends ScrawlMaskConfig {
+  readonly sourceLayerId?: string;
+  readonly strategy?: LayerMaskStrategy;
+}
+
 export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'> {
   readonly id: string;
   scrawlFilter?: ScrawlFilterAdapter;
 }
 
 export interface LayerMaskState extends Required<Pick<ScrawlMaskConfig, 'mode'>> {
+  readonly sourceLayerId?: string;
+  readonly strategy: LayerMaskStrategy;
   readonly opacity?: number;
   readonly feather?: number;
   readonly memoize?: boolean;
@@ -236,7 +245,9 @@ export interface Composition {
   addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
   removeEffect(layer: Layer, effect: LayerEffectState | string): void;
   clearEffects(layer: Layer): void;
-  setMask(layer: Layer, config: ScrawlMaskConfig): LayerMaskState;
+  setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
+  setLayerMask(targetLayer: Layer, sourceLayer: Layer, config?: Omit<LayerMaskConfig, 'sourceLayerId'>): LayerMaskState;
+  clearMask(layer: Layer): void;
   removeLayer(layer: Layer): void;
   reorderLayer(layer: Layer, newIndex: number): void;
   play(): void;

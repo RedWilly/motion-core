@@ -8,6 +8,8 @@ import type {
   SerializedAsset,
   SerializedComposition,
   SerializedLayerConfig,
+  ScrawlEffectConfig,
+  LayerMaskConfig,
 } from '../shared/types';
 
 type SerializedLayer = SerializedComposition['layers'][number];
@@ -30,7 +32,7 @@ function serializeLayer(layer: Composition['layers'][number]): SerializedLayer {
 
   if (layer.source !== undefined) serialized.source = layer.source;
   if (layer.content !== undefined) serialized.content = layer.content;
-  const config = serializeLayerConfig(layer.config);
+  const config = serializeLayerConfig(layer);
   if (Object.keys(config).length > 0) serialized.config = config;
 
   const packet = layer.scrawlEntity.saveAsPacket?.();
@@ -116,7 +118,8 @@ export function hydrateSerializedComposition(
   return composition;
 }
 
-function serializeLayerConfig(config: Readonly<LayerConfig>): SerializedLayerConfig {
+function serializeLayerConfig(layer: Readonly<Layer>): SerializedLayerConfig {
+  const config = layer.config;
   const serialized: SerializedLayerConfig = {};
 
   if (config.scaleMode !== undefined) serialized.scaleMode = config.scaleMode;
@@ -127,10 +130,29 @@ function serializeLayerConfig(config: Readonly<LayerConfig>): SerializedLayerCon
   if (config.textMode !== undefined) serialized.textMode = config.textMode;
   if (config.text !== undefined) serialized.text = config.text;
   if (config.variant !== undefined) serialized.variant = config.variant;
-  if (config.effects !== undefined) serialized.effects = config.effects;
-  if (config.mask !== undefined) serialized.mask = config.mask;
+  if (layer.effects.length > 0) serialized.effects = layer.effects.map(serializeEffectConfig);
+  if (layer.mask !== null) serialized.mask = serializeMaskConfig(layer.mask);
 
   return serialized;
+}
+
+function serializeEffectConfig(effect: Readonly<Layer['effects'][number]>): ScrawlEffectConfig {
+  return {
+    id: effect.id,
+    actions: effect.actions.map((action) => ({ ...action })),
+    ...(effect.opacity === undefined ? null : { opacity: effect.opacity }),
+  };
+}
+
+function serializeMaskConfig(mask: Readonly<NonNullable<Layer['mask']>>): LayerMaskConfig {
+  return {
+    mode: mask.mode,
+    strategy: mask.strategy,
+    ...(mask.sourceLayerId === undefined ? null : { sourceLayerId: mask.sourceLayerId }),
+    ...(mask.opacity === undefined ? null : { opacity: mask.opacity }),
+    ...(mask.feather === undefined ? null : { feather: mask.feather }),
+    ...(mask.memoize === undefined ? null : { memoize: mask.memoize }),
+  };
 }
 
 function serializeAssets(layers: ReadonlyArray<Layer>): SerializedAsset[] {

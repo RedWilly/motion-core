@@ -9,12 +9,12 @@ import type {
   EngineAdapters,
   Layer,
   LayerEffectState,
+  LayerMaskConfig,
   LayerMaskState,
   LayerConfig,
   LayerType,
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
-  ScrawlMaskConfig,
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
@@ -108,6 +108,7 @@ function applyLayerMask(
   mask: LayerMaskState | null,
 ): void {
   if (controller === undefined || mask === null) return;
+  if (mask.sourceLayerId !== undefined) return;
   const handle = controller.applyMask(layer.scrawlEntity, mask);
   if (handle !== undefined) mask.scrawlFilter = handle.filter;
 }
@@ -240,7 +241,7 @@ export function createComposition(
       layer.effects.length = 0;
     },
 
-    setMask(layer: Layer, config: ScrawlMaskConfig): LayerMaskState {
+    setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
       detachMaskFeather(effectsController, layer);
       const mask = normalizeScrawlMaskConfig(config) as LayerMaskState;
 
@@ -249,10 +250,33 @@ export function createComposition(
       return mask;
     },
 
+    setLayerMask(
+      targetLayer: Layer,
+      sourceLayer: Layer,
+      config: Omit<LayerMaskConfig, 'sourceLayerId'> = {},
+    ): LayerMaskState {
+      const mask = this.setMask(targetLayer, {
+        ...config,
+        sourceLayerId: sourceLayer.id,
+        strategy: config.strategy ?? 'cell',
+      });
+      sourceLayer.scrawlEntity.set({ visibility: false });
+      return mask;
+    },
+
+    clearMask(layer: Layer): void {
+      detachMaskFeather(effectsController, layer);
+      layer.mask = null;
+    },
+
     removeLayer(layer: Layer): void {
       while (layer.children.length > 0) {
         const child = layer.children[layer.children.length - 1];
         if (child) this.removeLayer(child);
+      }
+
+      for (const item of this.layers) {
+        if (item !== layer && item.mask?.sourceLayerId === layer.id) this.clearMask(item);
       }
 
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;

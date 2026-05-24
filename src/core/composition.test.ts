@@ -114,7 +114,7 @@ describe('createComposition', () => {
       { id: 'effect-0', actions: [{ action: 'gaussian-blur', radius: 4 }], opacity: 0.5 },
       { id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] },
     ]);
-    expect(layer.mask).toEqual({ mode: 'destination-in', opacity: 0.75, feather: 2, memoize: true });
+    expect(layer.mask).toEqual({ mode: 'destination-in', strategy: 'entity', opacity: 0.75, feather: 2, memoize: true });
   });
 
   test('rejects invalid layer effect and mask state before creating the layer', () => {
@@ -174,5 +174,28 @@ describe('createComposition', () => {
       'remove:mask-feather-3',
     ]);
     expect(composition.layers).toEqual([]);
+  });
+
+  test('records layer-to-layer mask workflow without attaching unsafe entity clipping', () => {
+    const { adapter, calls } = createFakeEffectsAdapter();
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      { createEffectsController: () => adapter },
+    );
+    const target = composition.addLayer('shape', undefined, { name: 'target' });
+    const matte = composition.addLayer('shape', undefined, { name: 'matte' });
+
+    const mask = composition.setLayerMask(target, matte, { mode: 'clip', feather: 2 });
+
+    expect(mask).toEqual({ mode: 'clip', strategy: 'cell', sourceLayerId: matte.id, feather: 2 });
+    expect(target.mask).toBe(mask);
+    expect(calls).toEqual([]);
+
+    composition.clearMask(target);
+    expect(target.mask).toBeNull();
+
+    composition.setLayerMask(target, matte, { mode: 'clip' });
+    composition.removeLayer(matte);
+    expect(target.mask).toBeNull();
   });
 });

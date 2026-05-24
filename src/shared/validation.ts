@@ -2,10 +2,10 @@ import { validationError } from './errors';
 import type {
   CompositionConfig,
   LayerEffectState,
+  LayerMaskConfig,
   LayerMaskState,
   ScrawlEffectConfig,
   ScrawlFilterAction,
-  ScrawlMaskConfig,
 } from './types';
 
 export interface NormalizedCompositionConfig {
@@ -105,7 +105,7 @@ export function normalizeLayerEffects(
 }
 
 export function normalizeScrawlMaskConfig(
-  config: Readonly<ScrawlMaskConfig> | undefined,
+  config: Readonly<LayerMaskConfig> | undefined,
 ): LayerMaskState | null {
   if (config === undefined) return null;
 
@@ -120,6 +120,8 @@ export function normalizeScrawlMaskConfig(
 
   return {
     mode: config.mode ?? 'clip',
+    strategy: config.strategy ?? 'entity',
+    ...(config.sourceLayerId === undefined ? null : { sourceLayerId: config.sourceLayerId }),
     ...(config.opacity === undefined ? null : { opacity: config.opacity }),
     ...(config.feather === undefined ? null : { feather: config.feather }),
     ...(config.memoize === undefined ? null : { memoize: config.memoize }),
