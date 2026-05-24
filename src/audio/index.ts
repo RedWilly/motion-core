@@ -21,5 +21,3 @@ export function normalizeBand(value: number, maxValue = 255): number {
   if (!Number.isFinite(value) || maxValue <= 0) return 0;
   return Math.min(Math.max(value / maxValue, 0), 1);
 }
-
-export * from './media-metadata';

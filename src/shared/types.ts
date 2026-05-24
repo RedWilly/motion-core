@@ -43,6 +43,8 @@ export interface LayerConfig {
   content?: unknown;
   scaleMode?: 'fill' | 'fit' | 'none';
   shape?: ShapeLayerConfig;
+  video?: VideoLayerConfig;
+  audio?: AudioLayerConfig;
   scrawl?: Readonly<Record<string, unknown>>;
   textMode?: 'label' | 'enhanced';
   text?: string;
@@ -58,6 +60,20 @@ export interface ShapeLayerConfig {
   fillStyle?: string;
   strokeStyle?: string;
   method?: string;
+}
+
+export interface MediaLayerConfig {
+  inPoint?: number;
+  outPoint?: number;
+  playbackRate?: number;
+}
+
+export interface VideoLayerConfig extends MediaLayerConfig {}
+
+export interface AudioLayerConfig extends MediaLayerConfig {
+  volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
 }
 
 export interface Layer {
