@@ -1,5 +1,5 @@
 {
-  "name": "motion-graphics-engine-core",
+  "name": "motion-core",
   "version": "0.1.0",
   "module": "src/index.ts",
   "main": "dist/index.js",
