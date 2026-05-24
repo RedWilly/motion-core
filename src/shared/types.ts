@@ -51,6 +51,7 @@ export interface LayerConfig {
   variant?: 'emitter' | 'net' | 'tracer';
   effects?: readonly ScrawlEffectConfig[];
   mask?: LayerMaskConfig;
+  precomp?: PrecompositionLayerConfig;
 }
 
 export interface ShapeLayerConfig {
@@ -94,8 +95,16 @@ export interface Layer {
   content?: unknown;
   effects: LayerEffectState[];
   mask: LayerMaskState | null;
+  precomposition: Composition | null;
+  scrawlCell?: ScrawlCellAdapter;
   scrawlEntity: ScrawlEntityAdapter;
   scrawlState: ScrawlTransformState;
+}
+
+export interface PrecompositionLayerConfig {
+  readonly composition: Composition;
+  readonly timeOffset?: number;
+  readonly playbackRate?: number;
 }
 
 export type ScrawlFilterActionName =
@@ -242,6 +251,10 @@ export interface Composition {
   timeline: TimelineAdapter;
   renderer: RenderAdapter;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
+  addPrecomposition(composition: Composition, config?: Omit<LayerConfig, 'content' | 'precomp'> & {
+    readonly timeOffset?: number;
+    readonly playbackRate?: number;
+  }): Layer;
   addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
   removeEffect(layer: Layer, effect: LayerEffectState | string): void;
   clearEffects(layer: Layer): void;
@@ -286,6 +299,18 @@ export interface ScrawlFilterAdapter {
   set?(values: Readonly<Record<string, unknown>>): unknown;
   kill?(): unknown;
   saveAsPacket?(options?: unknown): string;
+}
+
+export interface ScrawlCellAdapter {
+  readonly name: string;
+  set?(values: Readonly<Record<string, unknown>>): unknown;
+  kill?(): unknown;
+  render?(): unknown;
+  compile?(): unknown;
+  show?(): unknown;
+  addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  removeFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  clearFilters?(): unknown;
 }
 
 export interface ScrawlEffectsAdapter {
@@ -346,9 +371,16 @@ export interface EngineAdapters {
   createTimeline?: (duration: number) => TimelineAdapter;
   createRenderer?: (composition: CompositionRuntime) => RenderAdapter;
   createGroup?: (compositionName: string) => ScrawlGroupAdapter | undefined;
+  createPrecompositionCell?: (context: PrecompositionCellFactoryContext) => ScrawlCellAdapter | undefined;
   createEffectsController?: () => ScrawlEffectsAdapter | undefined;
   entityFactories?: Partial<Record<LayerType, LayerEntityFactory>>;
   importScrawlPacket?: (packet: string) => unknown;
+}
+
+export interface PrecompositionCellFactoryContext {
+  readonly parent: CompositionRuntime;
+  readonly composition: Composition;
+  readonly layerName: string;
 }
 
 export interface CompositionRuntime {
@@ -395,7 +427,7 @@ export interface SerializedComposition {
 
 export type SerializedLayerConfig = Omit<
   LayerConfig,
-  'content' | 'locked' | 'name' | 'opacity' | 'parent' | 'transform' | 'visible'
+  'content' | 'locked' | 'name' | 'opacity' | 'parent' | 'precomp' | 'transform' | 'visible'
 >;
 
 export interface SerializedAsset {

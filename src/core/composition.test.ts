@@ -198,4 +198,47 @@ describe('createComposition', () => {
     composition.removeLayer(matte);
     expect(target.mask).toBeNull();
   });
+
+  test('creates precomposition layers backed by adapter Cells and syncs child time', () => {
+    const cellCalls: string[] = [];
+    const child = createComposition({ width: 64, height: 48, duration: 10 });
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        createPrecompositionCell(context) {
+          cellCalls.push(`${context.layerName}:${context.composition.width}x${context.composition.height}`);
+          return {
+            name: `${context.layerName}-cell`,
+            render() {
+              cellCalls.push('render-cell');
+            },
+          };
+        },
+      },
+    );
+
+    const layer = composition.addPrecomposition(child, {
+      name: 'nested',
+      timeOffset: 1,
+      playbackRate: 2,
+    });
+    composition.seek(3);
+    composition.seek(3);
+
+    expect(layer.type).toBe('precomp');
+    expect(layer.source).toBe('nested-cell');
+    expect(layer.precomposition).toBe(child);
+    expect(layer.scrawlCell?.name).toBe('nested-cell');
+    expect(child.timeline.time()).toBe(4);
+    expect(cellCalls).toEqual(['nested:64x48', 'render-cell']);
+  });
+
+  test('rejects circular precomposition references', () => {
+    const parent = createComposition({ width: 100, height: 100 });
+    const child = createComposition({ width: 50, height: 50 });
+
+    parent.addPrecomposition(child);
+
+    expect(() => child.addPrecomposition(parent)).toThrow('Precomposition circular reference detected.');
+  });
 });

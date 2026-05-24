@@ -3,6 +3,7 @@ import type {
   CompositionRuntime,
   EngineAdapters,
   RenderAdapter,
+  ScrawlCellAdapter,
   ScrawlGroupAdapter,
 } from '../shared/types';
 import {
@@ -17,6 +18,7 @@ interface ScrawlCanvasAdapter {
   readonly name: string;
   readonly base?: { readonly name: string };
   readonly element?: HTMLCanvasElement;
+  buildCell?(items: Readonly<Record<string, unknown>>): ScrawlCellAdapter;
   set(values: Readonly<Record<string, unknown>>): unknown;
   render(): unknown;
 }
@@ -171,6 +173,24 @@ export function createBrowserScrawlAdapter(
       return scrawl.importPacket?.(packet);
     },
     createGroup: createGroupFactory(scrawl, canvas, namespace),
+    createPrecompositionCell(context) {
+      if (!canvas.buildCell) {
+        throw capabilityError(
+          'SCRAWL_CELL_FACTORY_MISSING',
+          'Scrawl canvas does not expose buildCell().',
+          'Use a Scrawl-canvas Canvas artefact capable of creating layer Cells.',
+        );
+      }
+
+      return canvas.buildCell({
+        name: `${namespace}-${context.layerName}-cell`,
+        dimensions: [context.composition.width, context.composition.height],
+        shown: false,
+        compiled: true,
+        cleared: true,
+        setRelativeDimensionsUsingBase: false,
+      });
+    },
     createEffectsController() {
       return createScrawlEffectsController(scrawl, { namespace });
     },

@@ -13,6 +13,8 @@ import type {
   LayerMaskState,
   LayerConfig,
   LayerType,
+  PrecompositionLayerConfig,
+  ScrawlCellAdapter,
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
   ScrawlTransformState,
@@ -72,6 +74,34 @@ function createScrawlState(transform: Transform, opacity: number, visible: boole
     globalAlpha: opacity,
     visibility: visible,
   };
+}
+
+function containsPrecomposition(root: Composition, search: Composition, seen = new Set<string>()): boolean {
+  if (root.id === search.id) return true;
+  if (seen.has(root.id)) return false;
+  seen.add(root.id);
+
+  for (const layer of root.layers) {
+    if (layer.precomposition !== null && containsPrecomposition(layer.precomposition, search, seen)) return true;
+  }
+
+  return false;
+}
+
+function syncPrecompositionLayer(
+  layer: Layer,
+  parentTime: number,
+  precompositionTimes: WeakMap<Layer, number>,
+): void {
+  if (layer.precomposition === null) return;
+  const config = layer.config.precomp;
+  const childTime = Math.max(0, (parentTime - (config?.timeOffset ?? 0)) * (config?.playbackRate ?? 1));
+  const clampedTime = Math.min(childTime, layer.precomposition.duration);
+  if (precompositionTimes.get(layer) === clampedTime) return;
+
+  precompositionTimes.set(layer, clampedTime);
+  layer.precomposition.seek(clampedTime);
+  layer.scrawlCell?.render?.();
 }
 
 function attachLayerEffect(
@@ -137,6 +167,7 @@ export function createComposition(
   const timeline = adapters.createTimeline?.(normalized.duration) ?? new MemoryTimeline(normalized.duration);
   const group = adapters.createGroup?.(normalized.name);
   const effectsController = adapters.createEffectsController?.();
+  const precompositionTimes = new WeakMap<Layer, number>();
   const registry = new EntityMappingRegistry(adapters.entityFactories);
   const baseRuntime = {
     id,
@@ -178,6 +209,12 @@ export function createComposition(
       const opacity = layerConfig.opacity ?? 1;
       const effects = normalizeLayerEffects(layerConfig.effects);
       const mask = normalizeScrawlMaskConfig(layerConfig.mask);
+      const precomposition = layerConfig.precomp?.composition ?? null;
+      const scrawlCell = layerConfig.precomp === undefined ? undefined : adapters.createPrecompositionCell?.({
+        parent: runtime,
+        composition: layerConfig.precomp.composition,
+        layerName: layerConfig.name ?? layerId,
+      });
       const baseLayer = {
         id: layerId,
         type,
@@ -192,6 +229,8 @@ export function createComposition(
         opacity,
         effects,
         mask,
+        precomposition,
+        ...(scrawlCell === undefined ? null : { scrawlCell }),
         scrawlEntity: entity,
         scrawlState: createScrawlState(transform, opacity, visible),
       };
@@ -211,6 +250,35 @@ export function createComposition(
       syncLayerToScrawl(layer);
       for (const effect of layer.effects) attachLayerEffect(effectsController, layer, effect);
       applyLayerMask(effectsController, layer, layer.mask);
+
+      return layer;
+    },
+
+    addPrecomposition(
+      childComposition: Composition,
+      layerConfig: Omit<LayerConfig, 'content' | 'precomp'> & {
+        readonly timeOffset?: number;
+        readonly playbackRate?: number;
+      } = {},
+    ): Layer {
+      if (childComposition.id === id || containsPrecomposition(childComposition, composition)) {
+        throw new Error('Precomposition circular reference detected.');
+      }
+
+      const precompConfig: PrecompositionLayerConfig = {
+        composition: childComposition,
+        ...(layerConfig.timeOffset === undefined ? null : { timeOffset: layerConfig.timeOffset }),
+        ...(layerConfig.playbackRate === undefined ? null : { playbackRate: layerConfig.playbackRate }),
+      };
+      const layer = this.addLayer('precomp', undefined, {
+        ...layerConfig,
+        precomp: precompConfig,
+      });
+
+      if (layer.scrawlCell !== undefined) {
+        layer.source = layer.scrawlCell.name;
+        layer.scrawlEntity.set({ imageSource: layer.scrawlCell.name });
+      }
 
       return layer;
     },
@@ -237,7 +305,6 @@ export function createComposition(
 
     clearEffects(layer: Layer): void {
       for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
-      for (const effect of layer.effects) delete effect.scrawlFilter;
       layer.effects.length = 0;
     },
 
@@ -285,6 +352,7 @@ export function createComposition(
       for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
       group?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();
+      precompositionTimes.delete(layer);
       registry.unregister(layer);
 
       const index = this.layers.indexOf(layer);
@@ -318,7 +386,10 @@ export function createComposition(
 
     seek(time: number): void {
       this.timeline.seek(time);
-      for (const layer of this.layers) syncLayerToScrawl(layer);
+      for (const layer of this.layers) {
+        syncPrecompositionLayer(layer, time, precompositionTimes);
+        syncLayerToScrawl(layer);
+      }
       void this.renderer.renderFrame();
     },
 

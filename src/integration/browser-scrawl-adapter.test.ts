@@ -10,23 +10,33 @@ function createFakeScrawl() {
     run: 0,
     halt: 0,
     renderKill: 0,
+    buildCell: '',
     purge: '',
     currentCanvas: '',
     groupHost: '',
-    entityName: '',
+    entityNames: [] as string[],
   };
 
-  const canvas = {
+	  const canvas = {
     name: 'canvas-a',
     base: { name: 'canvas-a-base' },
     set() {
       return this;
     },
-    render() {
-      calls.renderFrame += 1;
-      return undefined;
-    },
-  };
+	    render() {
+	      calls.renderFrame += 1;
+	      return undefined;
+	    },
+	    buildCell(items: Readonly<Record<string, unknown>>) {
+	      calls.buildCell = JSON.stringify(items);
+	      return {
+	        name: String(items['name']),
+	        set() {
+	          return this;
+	        },
+	      };
+	    },
+	  };
 
   const scrawl: ScrawlBrowserModule = {
     addCanvas() {
@@ -89,9 +99,9 @@ function createFakeScrawl() {
         },
       };
     },
-    makeBlock(items) {
-      calls.entityName = String(items['name']);
-      return {
+	    makeBlock(items) {
+	      calls.entityNames.push(String(items['name']));
+	      return {
         name: String(items['name']),
         type: 'Block',
         set() {
@@ -146,6 +156,7 @@ describe('createBrowserScrawlAdapter', () => {
     const composition = createComposition({ width: 100, height: 100, name: 'main' }, adapter);
 
     composition.addLayer('shape', undefined, { name: 'box' });
+    composition.addPrecomposition(createComposition({ width: 20, height: 10, name: 'child' }), { name: 'nested' });
     composition.play();
     composition.seek(0);
     composition.pause();
@@ -155,7 +166,9 @@ describe('createBrowserScrawlAdapter', () => {
     expect(calls.currentCanvas).toBe('canvas-a');
     expect(calls.groupHost).toBe('canvas-a-base');
     expect(calls.makeRender).toBe(1);
-    expect(calls.entityName).toBe('spec-box');
+    expect(calls.entityNames).toEqual(['spec-box', 'spec-nested']);
+    expect(calls.buildCell).toContain('"name":"spec-nested-cell"');
+    expect(calls.buildCell).toContain('"dimensions":[20,10]');
     expect(calls.run).toBe(1);
     expect(calls.halt).toBe(1);
     expect(calls.renderFrame).toBe(1);

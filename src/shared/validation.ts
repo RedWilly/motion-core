@@ -101,7 +101,11 @@ export function normalizeLayerEffects(
   effects: readonly ScrawlEffectConfig[] | undefined,
 ): LayerEffectState[] {
   if (effects === undefined) return [];
-  return effects.map((effect, index) => normalizeScrawlEffectConfig(effect, `effect-${index}`));
+  const normalized: LayerEffectState[] = new Array(effects.length);
+  for (let index = 0; index < effects.length; index += 1) {
+    normalized[index] = normalizeScrawlEffectConfig(effects[index]!, `effect-${index}`);
+  }
+  return normalized;
 }
 
 export function normalizeScrawlMaskConfig(
@@ -135,7 +139,10 @@ function normalizeEffectId(id: string | undefined, fallbackId: string): string {
 
 function cloneFilterAction(action: ScrawlFilterAction): ScrawlFilterAction {
   const cloned: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(action)) {
+  const keys = Object.keys(action) as Array<keyof ScrawlFilterAction>;
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index]!;
+    const value = action[key];
     cloned[key] = Array.isArray(value) ? [...value] : value;
   }
   return cloned as ScrawlFilterAction;
