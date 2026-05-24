@@ -47,6 +47,10 @@ describe('serialization', () => {
       parent,
       scaleMode: 'fit',
       scrawl: { method: 'fill' },
+      effects: [
+        { id: 'soft', actions: [{ action: 'gaussian-blur', radiusHorizontal: 4, radiusVertical: 4 }] },
+      ],
+      mask: { mode: 'destination-in', opacity: 0.75, feather: 2, memoize: true },
     });
     composition.timeline.seek(1.5);
 
@@ -68,6 +72,10 @@ describe('serialization', () => {
     expect(payload.layers[1]?.config).toMatchObject({
       scaleMode: 'fit',
       scrawl: { method: 'fill' },
+      effects: [
+        { id: 'soft', actions: [{ action: 'gaussian-blur', radiusHorizontal: 4, radiusVertical: 4 }] },
+      ],
+      mask: { mode: 'destination-in', opacity: 0.75, feather: 2, memoize: true },
     });
     expect(payload.layers[0]?.scrawlEntityName).toBe('box');
     expect(payload.layers[0]?.scrawlPacket).toContain('box');
@@ -97,6 +105,8 @@ describe('serialization', () => {
       text: 'Hello',
       textMode: 'enhanced',
       opacity: 0.5,
+      effects: [{ id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] }],
+      mask: { mode: 'clip', feather: 1 },
     });
     original.seek(1);
 
@@ -115,6 +125,13 @@ describe('serialization', () => {
     expect(hydrated.layers[1]?.parent).toBe(hydrated.layers[0]);
     expect(hydrated.layers[1]?.opacity).toBe(0.5);
     expect(hydrated.layers[1]?.config.text).toBe('Hello');
+    expect(hydrated.layers[1]?.effects).toEqual([
+      {
+        id: 'edge',
+        actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
+      },
+    ]);
+    expect(hydrated.layers[1]?.mask).toEqual({ mode: 'clip', feather: 1 });
     expect(hydrated.timeline.time()).toBe(1);
     expect(packets).toHaveLength(2);
   });

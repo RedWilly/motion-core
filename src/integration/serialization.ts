@@ -127,6 +127,8 @@ function serializeLayerConfig(config: Readonly<LayerConfig>): SerializedLayerCon
   if (config.textMode !== undefined) serialized.textMode = config.textMode;
   if (config.text !== undefined) serialized.text = config.text;
   if (config.variant !== undefined) serialized.variant = config.variant;
+  if (config.effects !== undefined) serialized.effects = config.effects;
+  if (config.mask !== undefined) serialized.mask = config.mask;
 
   return serialized;
 }
