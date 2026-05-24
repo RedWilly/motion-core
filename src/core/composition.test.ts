@@ -65,7 +65,7 @@ describe('createComposition', () => {
   test('removes child layers when a parent is removed', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const parent = composition.addLayer('shape');
-    const child = composition.addLayer('text', undefined, { parent });
+    const child = composition.addLayer('text', { parent });
 
     composition.removeLayer(parent);
 
@@ -75,11 +75,11 @@ describe('createComposition', () => {
 
   test('maps child layers to Scrawl pivot and mimic state', () => {
     const composition = createComposition({ width: 100, height: 100 });
-    const parent = composition.addLayer('shape', undefined, {
+    const parent = composition.addLayer('shape', {
       name: 'parent',
       transform: { position: { x: 40, y: 50 }, rotation: 15, scale: { x: 2, y: 2 } },
     });
-    const child = composition.addLayer('shape', undefined, {
+    const child = composition.addLayer('shape', {
       name: 'child',
       parent,
       transform: { position: { x: 10, y: 20 }, rotation: 5, scale: { x: 1.25, y: 1.25 } },
@@ -99,7 +99,7 @@ describe('createComposition', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const action = { action: 'gaussian-blur' as const, radius: 4 };
     const high = [255, 255, 255, 255];
-    const layer = composition.addLayer('shape', undefined, {
+    const layer = composition.addLayer('shape', {
       effects: [
         { actions: [action], opacity: 0.5 },
         { id: 'edge', actions: [{ action: 'threshold', level: 6, high }] },
@@ -120,15 +120,15 @@ describe('createComposition', () => {
   test('rejects invalid layer effect and mask state before creating the layer', () => {
     const composition = createComposition({ width: 100, height: 100 });
 
-    expect(() => composition.addLayer('shape', undefined, { effects: [{ actions: [] }] })).toThrow(
+    expect(() => composition.addLayer('shape', { effects: [{ actions: [] }] })).toThrow(
       'Scrawl effect requires at least one filter action.',
     );
     expect(() =>
-      composition.addLayer('shape', undefined, {
+      composition.addLayer('shape', {
         effects: [{ actions: [{ action: 'grayscale' }], opacity: 2 }],
       }),
     ).toThrow('opacity must be between 0 and 1.');
-    expect(() => composition.addLayer('shape', undefined, { mask: { feather: -1 } })).toThrow(
+    expect(() => composition.addLayer('shape', { mask: { feather: -1 } })).toThrow(
       'Scrawl mask feather must be a non-negative number.',
     );
     expect(composition.layers).toHaveLength(0);
@@ -140,7 +140,7 @@ describe('createComposition', () => {
       { width: 100, height: 100 },
       { createEffectsController: () => adapter },
     );
-    const layer = composition.addLayer('shape', undefined, {
+    const layer = composition.addLayer('shape', {
       effects: [{ id: 'soft', actions: [{ action: 'gaussian-blur', radius: 4 }] }],
       mask: { mode: 'clip', feather: 2 },
     });
@@ -203,8 +203,8 @@ describe('createComposition', () => {
         },
       },
     );
-    const target = composition.addLayer('shape', undefined, { name: 'target' });
-    const matte = composition.addLayer('shape', undefined, { name: 'matte' });
+    const target = composition.addLayer('shape', { name: 'target' });
+    const matte = composition.addLayer('shape', { name: 'matte' });
 
     const mask = composition.setLayerMask(target, matte, { mode: 'clip', feather: 2 });
 
@@ -232,7 +232,7 @@ describe('createComposition', () => {
   test('creates precomposition layers backed by adapter Cells and syncs child time', () => {
     const cellCalls: string[] = [];
     const child = createComposition({ width: 64, height: 48, duration: 10 });
-    const childLayer = child.addLayer('shape', undefined, { name: 'child-box' });
+    const childLayer = child.addLayer('shape', { name: 'child-box' });
     const composition = createComposition(
       { width: 100, height: 100 },
       {
@@ -267,7 +267,7 @@ describe('createComposition', () => {
     });
     composition.seek(3);
     composition.seek(3);
-    const lateChildLayer = child.addLayer('shape', undefined, { name: 'late-child-box' });
+    const lateChildLayer = child.addLayer('shape', { name: 'late-child-box' });
 
     expect(layer.type).toBe('precomp');
     expect(layer.source).toBe('nested-cell');

@@ -66,7 +66,7 @@ const composition = createComposition(
   adapters,
 );
 
-const title = composition.addLayer('text', undefined, {
+const title = composition.addLayer('text', {
   name: 'title',
   text: 'Motion',
   transform: {
@@ -184,7 +184,7 @@ There are two mask workflows in the current API.
 Same-layer masks are applied immediately to the target Scrawl entity:
 
 ```ts
-const foreground = composition.addLayer('shape', undefined, {
+const foreground = composition.addLayer('shape', {
   name: 'foreground',
   shape: {
     kind: 'rectangle',
@@ -211,7 +211,7 @@ const target = composition.addLayer('image', '/assets/subject.png', {
   name: 'subject',
 });
 
-const matte = composition.addLayer('shape', undefined, {
+const matte = composition.addLayer('shape', {
   name: 'subject-matte',
   shape: {
     kind: 'wheel',
@@ -254,7 +254,7 @@ const child = createComposition({
   frameRate: 30,
 });
 
-child.addLayer('text', undefined, {
+child.addLayer('text', {
   name: 'label',
   text: 'Live',
 });
@@ -336,7 +336,7 @@ const composition = createComposition({
   duration: 5,
 });
 
-const layer = composition.addLayer('shape', undefined, {
+const layer = composition.addLayer('shape', {
   name: 'box',
   transform: {
     position: { x: 100, y: 120 },

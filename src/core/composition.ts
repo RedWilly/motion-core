@@ -135,6 +135,14 @@ function findLayerById(layers: ReadonlyArray<Layer>, id: string | undefined): La
   return undefined;
 }
 
+function normalizeAddLayerArgs(
+  sourceOrConfig: string | LayerConfig | undefined,
+  config: LayerConfig | undefined,
+): { source: string | undefined; config: LayerConfig } {
+  if (typeof sourceOrConfig === 'string') return { source: sourceOrConfig, config: config ?? {} };
+  return { source: undefined, config: sourceOrConfig ?? config ?? {} };
+}
+
 function attachLayerEffect(
   controller: ScrawlEffectsAdapter | undefined,
   layer: Layer,
@@ -297,7 +305,8 @@ export function createComposition(
     timeline,
     renderer: adapters.createRenderer?.(runtime) ?? new NoopRenderer(runtime),
 
-    addLayer(type: LayerType, source?: string, layerConfig: LayerConfig = {}): Layer {
+    addLayer(type: LayerType, sourceOrConfig?: string | LayerConfig, config?: LayerConfig): Layer {
+      const { source, config: layerConfig } = normalizeAddLayerArgs(sourceOrConfig, config);
       const layerId = createId(type);
       const baseEntityContext = {
         id: layerId,
@@ -377,7 +386,7 @@ export function createComposition(
         ...(layerConfig.timeOffset === undefined ? null : { timeOffset: layerConfig.timeOffset }),
         ...(layerConfig.playbackRate === undefined ? null : { playbackRate: layerConfig.playbackRate }),
       };
-      const layer = this.addLayer('precomp', undefined, {
+      const layer = this.addLayer('precomp', {
         ...layerConfig,
         precomp: precompConfig,
       });

@@ -252,6 +252,7 @@ export interface Composition {
   layers: Layer[];
   timeline: TimelineAdapter;
   renderer: RenderAdapter;
+  addLayer(type: LayerType, config?: LayerConfig): Layer;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
   addPrecomposition(composition: Composition, config?: Omit<LayerConfig, 'content' | 'precomp'> & {
     readonly timeOffset?: number;

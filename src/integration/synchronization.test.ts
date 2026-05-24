@@ -41,7 +41,7 @@ describe('TimelineSynchronizer', () => {
 
   test('seeks timeline, media, layers, and renderer to one time source', async () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5 });
-    const layer = composition.addLayer('shape', undefined, {
+    const layer = composition.addLayer('shape', {
       transform: { position: { x: 10, y: 20 } },
     });
     const setCalls: Array<Readonly<Record<string, unknown>>> = [];

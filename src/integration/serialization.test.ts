@@ -37,7 +37,7 @@ describe('serialization', () => {
         },
       },
     );
-    const parent = composition.addLayer('shape', undefined, {
+    const parent = composition.addLayer('shape', {
       name: 'box',
       shape: { kind: 'wheel', radius: 32, fillStyle: 'red' },
       transform: { position: { x: 10, y: 20 } },
@@ -95,11 +95,11 @@ describe('serialization', () => {
         },
       },
     );
-    const parent = original.addLayer('shape', undefined, {
+    const parent = original.addLayer('shape', {
       name: 'parent',
       shape: { kind: 'rectangle', width: 10, height: 20 },
     });
-    original.addLayer('text', undefined, {
+    original.addLayer('text', {
       name: 'child',
       parent,
       text: 'Hello',
@@ -152,8 +152,8 @@ describe('serialization', () => {
 
   test('serializes effects and layer mask relationships added through the core API', () => {
     const composition = createComposition({ width: 100, height: 100 });
-    const target = composition.addLayer('shape', undefined, { name: 'target' });
-    const matte = composition.addLayer('shape', undefined, { name: 'matte' });
+    const target = composition.addLayer('shape', { name: 'target' });
+    const matte = composition.addLayer('shape', { name: 'matte' });
     composition.addEffect(target, { id: 'soft', actions: [{ action: 'gaussian-blur', radiusHorizontal: 3 }] });
     composition.setLayerMask(target, matte, { mode: 'clip', feather: 2 });
 

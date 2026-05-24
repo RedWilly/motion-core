@@ -155,7 +155,7 @@ describe('createBrowserScrawlAdapter', () => {
     });
     const composition = createComposition({ width: 100, height: 100, name: 'main' }, adapter);
 
-    composition.addLayer('shape', undefined, { name: 'box' });
+    composition.addLayer('shape', { name: 'box' });
     composition.addPrecomposition(createComposition({ width: 20, height: 10, name: 'child' }), { name: 'nested' });
     composition.play();
     composition.seek(0);

@@ -6,7 +6,7 @@ import { createAnimationController, createExpressionRenderHook } from './index';
 function createObservedLayer() {
   const setCalls: Array<Readonly<Record<string, unknown>>> = [];
   const composition = createComposition({ width: 100, height: 100, duration: 5 });
-  const layer = composition.addLayer('shape', undefined, {
+  const layer = composition.addLayer('shape', {
     transform: { position: { x: 0, y: 0 }, scale: { x: 1, y: 1 } },
   });
   layer.scrawlEntity.set = (values) => {
@@ -66,7 +66,7 @@ describe('AnimationController', () => {
 
   test('evaluates expressions with time, frame, layer, and helper context', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5, frameRate: 24 });
-    const layer = composition.addLayer('shape', undefined, {
+    const layer = composition.addLayer('shape', {
       name: 'box',
       transform: { position: { x: 10, y: 0 } },
     });
@@ -98,7 +98,7 @@ describe('AnimationController', () => {
 
   test('keeps the last valid expression value after evaluation errors', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5 });
-    const layer = composition.addLayer('shape', undefined, {
+    const layer = composition.addLayer('shape', {
       transform: { position: { x: 2, y: 0 } },
     });
     const controller = createAnimationController(composition);
