@@ -1,4 +1,5 @@
 export * from './browser-scrawl-adapter';
+export * from './effects';
 export * from './entity-mapping';
 export * from './gsap-adapter';
 export * from './media-metadata';

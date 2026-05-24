@@ -49,6 +49,8 @@ export interface LayerConfig {
   textMode?: 'label' | 'enhanced';
   text?: string;
   variant?: 'emitter' | 'net' | 'tracer';
+  effects?: readonly ScrawlEffectConfig[];
+  mask?: ScrawlMaskConfig;
 }
 
 export interface ShapeLayerConfig {
@@ -90,8 +92,107 @@ export interface Layer {
   opacity: number;
   source?: string;
   content?: unknown;
+  effects: LayerEffectState[];
+  mask: LayerMaskState | null;
   scrawlEntity: ScrawlEntityAdapter;
   scrawlState: ScrawlTransformState;
+}
+
+export type ScrawlFilterActionName =
+  | 'alpha-to-channels'
+  | 'alpha-to-luminance'
+  | 'area-alpha'
+  | 'average-channels'
+  | 'blend'
+  | 'blur'
+  | 'channels-to-alpha'
+  | 'chroma'
+  | 'clamp-channels'
+  | 'colors-to-alpha'
+  | 'compose'
+  | 'corrode'
+  | 'deconvolute'
+  | 'displace'
+  | 'emboss'
+  | 'flood'
+  | 'gaussian-blur'
+  | 'glitch'
+  | 'grayscale'
+  | 'invert-channels'
+  | 'lock-channels-to-levels'
+  | 'luminance-to-alpha'
+  | 'map-to-gradient'
+  | 'matrix'
+  | 'modify-ok-channels'
+  | 'modulate-channels'
+  | 'modulate-ok-channels'
+  | 'negative'
+  | 'newsprint'
+  | 'offset'
+  | 'pixelate'
+  | 'process-image'
+  | 'random-noise'
+  | 'reduce-palette'
+  | 'rotate-hue'
+  | 'set-channel-to-level'
+  | 'step-channels'
+  | 'swirl'
+  | 'threshold'
+  | 'tiles'
+  | 'tint-channels'
+  | 'unsharp'
+  | 'vary-channels-by-weights'
+  | 'zoom-blur';
+
+export type ScrawlFilterLine = 'source' | 'source-alpha' | string;
+
+export interface ScrawlFilterAction {
+  readonly action: ScrawlFilterActionName;
+  readonly lineIn?: ScrawlFilterLine;
+  readonly lineMix?: ScrawlFilterLine;
+  readonly lineOut?: string;
+  readonly opacity?: number;
+  readonly [key: string]: unknown;
+}
+
+export interface ScrawlEffectConfig {
+  readonly id?: string;
+  readonly actions: readonly ScrawlFilterAction[];
+  readonly opacity?: number;
+}
+
+export type ScrawlMaskMode =
+  | 'clip'
+  | 'copy'
+  | 'destination-atop'
+  | 'destination-in'
+  | 'destination-over'
+  | 'destination-out'
+  | 'darker'
+  | 'lighter'
+  | 'source-atop'
+  | 'source-in'
+  | 'source-out'
+  | 'source-over'
+  | 'xor';
+
+export interface ScrawlMaskConfig {
+  readonly mode?: ScrawlMaskMode;
+  readonly opacity?: number;
+  readonly feather?: number;
+  readonly memoize?: boolean;
+}
+
+export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'> {
+  readonly id: string;
+  scrawlFilter?: ScrawlFilterAdapter;
+}
+
+export interface LayerMaskState extends Required<Pick<ScrawlMaskConfig, 'mode'>> {
+  readonly opacity?: number;
+  readonly feather?: number;
+  readonly memoize?: boolean;
+  scrawlFilter?: ScrawlFilterAdapter;
 }
 
 export interface ScrawlTransformState {
@@ -139,6 +240,9 @@ export interface ScrawlEntityAdapter {
   readonly name: string;
   readonly type: string;
   set(values: Readonly<Record<string, unknown>> | Readonly<ScrawlTransformState>): unknown;
+  addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  removeFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  clearFilters?(): unknown;
   kill?(): unknown;
   saveAsPacket?(options?: unknown): string;
 }
@@ -148,6 +252,20 @@ export interface ScrawlGroupAdapter {
   addArtefacts?(...entities: Array<ScrawlEntityAdapter | string>): unknown;
   removeArtefacts?(...entities: Array<ScrawlEntityAdapter | string>): unknown;
   setArtefacts?(values: Record<string, unknown>): unknown;
+  addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  removeFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  clearFilters?(): unknown;
+  addFiltersToEntitys?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  removeFiltersFromEntitys?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
+  clearFiltersFromEntitys?(): unknown;
+}
+
+export interface ScrawlFilterAdapter {
+  readonly name: string;
+  readonly type?: string;
+  set?(values: Readonly<Record<string, unknown>>): unknown;
+  kill?(): unknown;
+  saveAsPacket?(options?: unknown): string;
 }
 
 export interface RenderAdapter {

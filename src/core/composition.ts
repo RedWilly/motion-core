@@ -13,7 +13,7 @@ import type {
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
-import { normalizeCompositionConfig } from '../shared/validation';
+import { normalizeCompositionConfig, normalizeLayerEffects, normalizeScrawlMaskConfig } from '../shared/validation';
 import { MemoryTimeline, NoopRenderer } from './adapters';
 
 const defaultPositionX = 0;
@@ -111,6 +111,8 @@ export function createComposition(
       const transform = mergeTransform(layerConfig.transform);
       const visible = layerConfig.visible ?? true;
       const opacity = layerConfig.opacity ?? 1;
+      const effects = normalizeLayerEffects(layerConfig.effects);
+      const mask = normalizeScrawlMaskConfig(layerConfig.mask);
       const baseLayer = {
         id: layerId,
         type,
@@ -123,6 +125,8 @@ export function createComposition(
         visible,
         locked: layerConfig.locked ?? false,
         opacity,
+        effects,
+        mask,
         scrawlEntity: entity,
         scrawlState: createScrawlState(transform, opacity, visible),
       };

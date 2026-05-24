@@ -3,6 +3,7 @@ import type {
   LayerEntityFactoryContext,
   LayerType,
   ScrawlEntityAdapter,
+  ScrawlFilterAdapter,
   ScrawlGroupAdapter,
 } from '../shared/types';
 
@@ -12,6 +13,7 @@ export interface ScrawlFactoryModule {
   makeBlock: ScrawlFactory;
   makeEmitter: ScrawlFactory;
   makeEnhancedLabel: ScrawlFactory;
+  makeFilter?: (items: Record<string, unknown>) => ScrawlFilterAdapter;
   makeGroup: (items: Record<string, unknown>) => ScrawlGroupAdapter;
   makeLabel: ScrawlFactory;
   makeNet: ScrawlFactory;

@@ -50,4 +50,43 @@ describe('createComposition', () => {
     expect(child.scrawlState.useMimicScale).toBe(true);
     expect(child.scrawlState.scale).toBe(0.25);
   });
+
+  test('normalizes layer effect and mask state without retaining caller-owned action objects', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const action = { action: 'gaussian-blur' as const, radius: 4 };
+    const high = [255, 255, 255, 255];
+    const layer = composition.addLayer('shape', undefined, {
+      effects: [
+        { actions: [action], opacity: 0.5 },
+        { id: 'edge', actions: [{ action: 'threshold', level: 6, high }] },
+      ],
+      mask: { mode: 'destination-in', opacity: 0.75, feather: 2, memoize: true },
+    });
+
+    action.radius = 99;
+    high[0] = 0;
+
+    expect(layer.effects).toEqual([
+      { id: 'effect-0', actions: [{ action: 'gaussian-blur', radius: 4 }], opacity: 0.5 },
+      { id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] },
+    ]);
+    expect(layer.mask).toEqual({ mode: 'destination-in', opacity: 0.75, feather: 2, memoize: true });
+  });
+
+  test('rejects invalid layer effect and mask state before creating the layer', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+
+    expect(() => composition.addLayer('shape', undefined, { effects: [{ actions: [] }] })).toThrow(
+      'Scrawl effect requires at least one filter action.',
+    );
+    expect(() =>
+      composition.addLayer('shape', undefined, {
+        effects: [{ actions: [{ action: 'grayscale' }], opacity: 2 }],
+      }),
+    ).toThrow('opacity must be between 0 and 1.');
+    expect(() => composition.addLayer('shape', undefined, { mask: { feather: -1 } })).toThrow(
+      'Scrawl mask feather must be a non-negative number.',
+    );
+    expect(composition.layers).toHaveLength(0);
+  });
 });

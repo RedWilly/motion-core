@@ -1,5 +1,12 @@
 import { validationError } from './errors';
-import type { CompositionConfig } from './types';
+import type {
+  CompositionConfig,
+  LayerEffectState,
+  LayerMaskState,
+  ScrawlEffectConfig,
+  ScrawlFilterAction,
+  ScrawlMaskConfig,
+} from './types';
 
 export interface NormalizedCompositionConfig {
   width: number;
@@ -41,6 +48,15 @@ export function assertFrameRate(value: number): void {
   }
 }
 
+export function assertUnitRange(value: number, propertyName: string): void {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw validationError('INVALID_UNIT_RANGE', `${propertyName} must be between 0 and 1.`, {
+      propertyName,
+      value,
+    });
+  }
+}
+
 export function normalizeCompositionConfig(config: CompositionConfig): NormalizedCompositionConfig {
   const normalized: NormalizedCompositionConfig = {
     width: config.width,
@@ -59,4 +75,66 @@ export function normalizeCompositionConfig(config: CompositionConfig): Normalize
   assertFrameRate(normalized.frameRate);
 
   return normalized;
+}
+
+export function normalizeScrawlEffectConfig(
+  config: Readonly<ScrawlEffectConfig>,
+  fallbackId: string,
+): LayerEffectState {
+  if (config.actions.length === 0) {
+    throw validationError(
+      'SCRAWL_EFFECT_EMPTY',
+      'Scrawl effect requires at least one filter action.',
+    );
+  }
+
+  if (config.opacity !== undefined) assertUnitRange(config.opacity, 'opacity');
+
+  return {
+    id: normalizeEffectId(config.id, fallbackId),
+    actions: config.actions.map(cloneFilterAction),
+    ...(config.opacity === undefined ? null : { opacity: config.opacity }),
+  };
+}
+
+export function normalizeLayerEffects(
+  effects: readonly ScrawlEffectConfig[] | undefined,
+): LayerEffectState[] {
+  if (effects === undefined) return [];
+  return effects.map((effect, index) => normalizeScrawlEffectConfig(effect, `effect-${index}`));
+}
+
+export function normalizeScrawlMaskConfig(
+  config: Readonly<ScrawlMaskConfig> | undefined,
+): LayerMaskState | null {
+  if (config === undefined) return null;
+
+  if (config.opacity !== undefined) assertUnitRange(config.opacity, 'opacity');
+
+  if (config.feather !== undefined && (!Number.isFinite(config.feather) || config.feather < 0)) {
+    throw validationError('SCRAWL_MASK_INVALID_FEATHER', 'Scrawl mask feather must be a non-negative number.', {
+      propertyName: 'feather',
+      value: config.feather,
+    });
+  }
+
+  return {
+    mode: config.mode ?? 'clip',
+    ...(config.opacity === undefined ? null : { opacity: config.opacity }),
+    ...(config.feather === undefined ? null : { feather: config.feather }),
+    ...(config.memoize === undefined ? null : { memoize: config.memoize }),
+  };
+}
+
+function normalizeEffectId(id: string | undefined, fallbackId: string): string {
+  const normalized = id?.trim();
+  return normalized === undefined || normalized.length === 0 ? fallbackId : normalized;
+}
+
+function cloneFilterAction(action: ScrawlFilterAction): ScrawlFilterAction {
+  const cloned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(action)) {
+    cloned[key] = Array.isArray(value) ? [...value] : value;
+  }
+  return cloned as ScrawlFilterAction;
 }
