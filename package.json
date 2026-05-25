@@ -1,9 +1,10 @@
 {
   "name": "motion-core",
   "version": "0.1.0",
-  "module": "src/index.ts",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "Typed 2D motion composition core for Scrawl-canvas rendering, GSAP timelines, and Mediabunny media export.",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
@@ -49,24 +50,33 @@
     "fast-check": "^4.7.0",
     "gsap": "^3.15.0",
     "mediabunny": "^1.44.0",
-    "scrawl-canvas": "^8.17.0",
+    "scrawl-canvas": "^8.18.0",
+    "typescript": "^5.9.3",
     "tsup": "^8.5.1"
   },
   "peerDependencies": {
     "gsap": "^3.15.0",
     "mediabunny": "^1.44.0",
-    "scrawl-canvas": "^8.17.0",
-    "typescript": "^5"
+    "scrawl-canvas": "^8.18.0"
   },
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "keywords": [
+    "2d",
     "motion-graphics",
     "video",
+    "video-export",
     "animation",
+    "timeline",
+    "compositing",
     "canvas",
+    "webcodecs",
+    "typescript",
     "gsap",
     "scrawl-canvas",
     "mediabunny"
