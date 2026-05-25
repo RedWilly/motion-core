@@ -21,15 +21,6 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@core/*": ["./src/core/*"],
-      "@animation/*": ["./src/animation/*"],
-      "@export/*": ["./src/export/*"],
-      "@audio/*": ["./src/audio/*"],
-      "@integration/*": ["./src/integration/*"]
-    },
     "types": ["bun"]
   },
   "include": ["src/**/*"],
