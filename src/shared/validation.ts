@@ -15,7 +15,6 @@ export interface NormalizedCompositionConfig {
   frameRate: number;
   backgroundColor: string;
   name: string;
-  canvas?: HTMLCanvasElement;
 }
 
 export function assertPositiveInteger(value: number, propertyName: string): void {
@@ -66,8 +65,6 @@ export function normalizeCompositionConfig(config: CompositionConfig): Normalize
     backgroundColor: config.backgroundColor ?? 'transparent',
     name: config.name ?? 'composition',
   };
-
-  if (config.canvas !== undefined) normalized.canvas = config.canvas;
 
   assertPositiveInteger(normalized.width, 'width');
   assertPositiveInteger(normalized.height, 'height');

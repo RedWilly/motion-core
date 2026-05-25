@@ -111,8 +111,3 @@ export function createScrawlEntityFactories(
     precomp: (context) => scrawl.makePicture(baseEntityConfig(wrapContext(context))),
   };
 }
-
-export function createScrawlGroupFactory(scrawl: ScrawlFactoryModule, options: ScrawlEntityFactoryOptions = {}) {
-  return (compositionName: string): ScrawlGroupAdapter =>
-    scrawl.makeGroup({ name: namespacedName(options.namespace, `${compositionName}-main-group`) });
-}

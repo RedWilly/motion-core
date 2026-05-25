@@ -5,12 +5,8 @@ import type {
   ScrawlEffectsAdapter,
   ScrawlEntityAdapter,
   ScrawlFilterAdapter,
-  ScrawlFilterAction,
-  ScrawlFilterActionName,
-  ScrawlFilterLine,
   ScrawlGroupAdapter,
   ScrawlMaskConfig,
-  ScrawlMaskMode,
 } from '../shared/types';
 import { normalizeScrawlEffectConfig, normalizeScrawlMaskConfig } from '../shared/validation';
 import type { ScrawlFactoryModule } from './scrawl-factories';

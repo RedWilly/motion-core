@@ -14,7 +14,6 @@ import type {
   LayerConfig,
   LayerType,
   PrecompositionLayerConfig,
-  ScrawlCellAdapter,
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
   ScrawlGroupAdapter,

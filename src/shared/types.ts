@@ -30,7 +30,6 @@ export interface CompositionConfig {
   frameRate?: number;
   backgroundColor?: string;
   name?: string;
-  canvas?: HTMLCanvasElement;
 }
 
 export interface LayerConfig {

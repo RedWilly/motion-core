@@ -14,7 +14,7 @@ import type {
 
 type SerializedLayer = SerializedComposition['layers'][number];
 
-const serializationVersion = '0.2.0';
+const serializationVersion = '0.1.0';
 
 function serializeLayer(layer: Composition['layers'][number]): SerializedLayer {
   const serialized: SerializedLayer = {

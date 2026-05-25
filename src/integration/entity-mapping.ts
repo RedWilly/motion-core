@@ -79,9 +79,3 @@ export class EntityMappingRegistry {
     return this.entityByLayerId.get(layer.id);
   }
 }
-
-export function createEntityMappingRegistry(
-  factories?: Partial<Record<LayerType, LayerEntityFactory>>,
-): EntityMappingRegistry {
-  return new EntityMappingRegistry(factories);
-}
