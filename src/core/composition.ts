@@ -14,6 +14,7 @@ import type {
   LayerConfig,
   LayerType,
   PrecompositionLayerConfig,
+  RenderAdapter,
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
   ScrawlGroupAdapter,
@@ -271,6 +272,21 @@ function detachLayerMaskCell(
   delete targetLayer.mask?.scrawlCell;
 }
 
+function syncCompositionFrame(
+  layers: ReadonlyArray<Layer>,
+  time: number,
+  precompositionTimes: WeakMap<Layer, number>,
+): void {
+  for (const layer of layers) {
+    syncPrecompositionLayer(layer, time, precompositionTimes);
+    syncLayerToScrawl(layer);
+  }
+}
+
+function currentTimeMs(): number {
+  return globalThis.performance?.now() ?? Date.now();
+}
+
 export function createComposition(
   config: CompositionConfig,
   adapters: EngineAdapters = {},
@@ -291,6 +307,21 @@ export function createComposition(
     timeline,
   };
   if (activeGroup !== undefined) runtime.group = activeGroup;
+  const renderer: RenderAdapter = adapters.createRenderer?.(runtime) ?? new NoopRenderer(runtime);
+  const rendererDrivesPlayback = renderer.setFrameCallback !== undefined;
+  const livePlayback = {
+    running: false,
+    startedAtMs: 0,
+  };
+
+  const syncLiveFrame = (): void => {
+    if (livePlayback.running) {
+      const elapsedSeconds = (currentTimeMs() - livePlayback.startedAtMs) / 1000;
+      const nextTime = normalized.duration > 0 ? elapsedSeconds % normalized.duration : 0;
+      timeline.seek(nextTime, true);
+    }
+    syncCompositionFrame(runtime.layers, timeline.time(), precompositionTimes);
+  };
 
   const composition = {
     id,
@@ -302,7 +333,7 @@ export function createComposition(
     backgroundColor: normalized.backgroundColor,
     layers: runtime.layers,
     timeline,
-    renderer: adapters.createRenderer?.(runtime) ?? new NoopRenderer(runtime),
+    renderer,
 
     addLayer(type: LayerType, sourceOrConfig?: string | LayerConfig, config?: LayerConfig): Layer {
       const { source, config: layerConfig } = normalizeAddLayerArgs(sourceOrConfig, config);
@@ -496,21 +527,25 @@ export function createComposition(
     },
 
     play(): void {
-      this.timeline.play();
+      if (rendererDrivesPlayback) {
+        livePlayback.startedAtMs = currentTimeMs() - this.timeline.time() * 1000;
+        livePlayback.running = true;
+      } else {
+        this.timeline.play();
+      }
       this.renderer.play();
     },
 
     pause(): void {
-      this.timeline.pause();
+      if (rendererDrivesPlayback) livePlayback.running = false;
+      else this.timeline.pause();
       this.renderer.pause();
     },
 
     seek(time: number): void {
+      livePlayback.running = false;
       this.timeline.seek(time);
-      for (const layer of this.layers) {
-        syncPrecompositionLayer(layer, time, precompositionTimes);
-        syncLayerToScrawl(layer);
-      }
+      syncCompositionFrame(this.layers, time, precompositionTimes);
       void this.renderer.renderFrame();
     },
 
@@ -518,6 +553,8 @@ export function createComposition(
       return serializeComposition(this);
     },
   } satisfies Composition;
+
+  composition.renderer.setFrameCallback?.(syncLiveFrame);
 
   compositionInternals.set(composition, {
     setHostGroup(group: ScrawlGroupAdapter | undefined): void {

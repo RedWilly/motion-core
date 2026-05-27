@@ -56,7 +56,7 @@ describe('serialization', () => {
 
     const payload = parseSerializedComposition(serializeComposition(composition));
 
-    expect(payload.version).toBe('0.2.0');
+    expect(payload.version).toBe('0.1.0');
     expect(payload.composition).toMatchObject({
       name: 'scene',
       width: 1920,

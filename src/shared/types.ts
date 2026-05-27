@@ -330,6 +330,7 @@ export interface RenderAdapter {
   play(): void;
   pause(): void;
   renderFrame(): void | Promise<void>;
+  setFrameCallback?(callback: (() => void) | null): void;
   captureFrame?(options: Readonly<FrameCaptureOptions>): Promise<Blob>;
   getFrameCanvas?(): HTMLCanvasElement | OffscreenCanvas;
 }

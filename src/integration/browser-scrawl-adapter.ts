@@ -61,6 +61,7 @@ class BrowserScrawlRenderer implements RenderAdapter {
   private readonly canvas: ScrawlCanvasAdapter;
   private readonly element: HTMLCanvasElement;
   private readonly render: ScrawlRenderAdapter;
+  private frameCallback: (() => void) | null = null;
 
   constructor(canvas: ScrawlCanvasAdapter, element: HTMLCanvasElement, render: ScrawlRenderAdapter) {
     this.canvas = canvas;
@@ -78,6 +79,14 @@ class BrowserScrawlRenderer implements RenderAdapter {
 
   renderFrame(): void {
     this.canvas.render();
+  }
+
+  setFrameCallback(callback: (() => void) | null): void {
+    this.frameCallback = callback;
+  }
+
+  runFrameCallback(): void {
+    this.frameCallback?.();
   }
 
   async captureFrame(options: Readonly<{ mimeType: string; quality?: number }>): Promise<Blob> {
@@ -219,6 +228,9 @@ export function createBrowserScrawlAdapter(
         name: `${namespace}-${composition.name}-render`,
         target: canvas.name,
         maxFrameRate: 0,
+        commence: () => {
+          renderer?.runFrameCallback();
+        },
       });
       renderer = new BrowserScrawlRenderer(canvas, element, render);
       return renderer;

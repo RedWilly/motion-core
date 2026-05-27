@@ -282,6 +282,77 @@ describe('createComposition', () => {
     ]);
   });
 
+  test('installs a renderer frame callback for live playback sync', () => {
+    let frameCallback: (() => void) | null = null;
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        createRenderer() {
+          return {
+            play() {},
+            pause() {},
+            renderFrame() {},
+            setFrameCallback(callback) {
+              frameCallback = callback;
+            },
+          };
+        },
+      },
+    );
+    const layer = composition.addLayer('shape', {
+      transform: { position: { x: 24, y: 36 } },
+    });
+    layer.scrawlEntity.set = (values) => {
+      setCalls.push({ ...values });
+      return layer.scrawlEntity;
+    };
+
+    composition.timeline.seek(1);
+    frameCallback?.();
+
+    expect(setCalls.at(-1)?.['startX']).toBe(24);
+    expect(setCalls.at(-1)?.['startY']).toBe(36);
+  });
+
+  test('uses renderer frames as the live playback clock', () => {
+    const originalNow = globalThis.performance.now;
+    let now = 1000;
+    globalThis.performance.now = () => now;
+    let frameCallback: (() => void) | null = null;
+    let rendererRunning = false;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 4 },
+      {
+        createRenderer() {
+          return {
+            play() {
+              rendererRunning = true;
+            },
+            pause() {
+              rendererRunning = false;
+            },
+            renderFrame() {},
+            setFrameCallback(callback) {
+              frameCallback = callback;
+            },
+          };
+        },
+      },
+    );
+
+    try {
+      composition.play();
+      now = 1250;
+      frameCallback?.();
+
+      expect(rendererRunning).toBe(true);
+      expect(composition.timeline.time()).toBeCloseTo(0.25);
+    } finally {
+      globalThis.performance.now = originalNow;
+    }
+  });
+
   test('rejects circular precomposition references', () => {
     const parent = createComposition({ width: 100, height: 100 });
     const child = createComposition({ width: 50, height: 50 });
