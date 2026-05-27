@@ -141,7 +141,11 @@ describe('TimelineSynchronizer', () => {
       },
     };
     const sync = createTimelineSynchronizer(composition, {
-      hooks: [{ beforeRender: (time) => order.push(`hook:${time}`) }],
+      hooks: [{
+        beforeRender(time) {
+          order.push(`hook:${time}`);
+        },
+      }],
     });
 
     sync.addMedia(target);
@@ -169,7 +173,11 @@ describe('TimelineSynchronizer', () => {
 
     await syncToTimelineTime(composition, 0.5, {
       frameRate: 30,
-      hooks: [{ beforeRender: (time) => order.push(`hook:${time}`) }],
+      hooks: [{
+        beforeRender(time) {
+          order.push(`hook:${time}`);
+        },
+      }],
     });
 
     expect(order).toEqual(['hook:0.5', 'render']);

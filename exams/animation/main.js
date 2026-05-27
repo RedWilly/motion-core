@@ -42,9 +42,8 @@ async function main() {
       width: 720,
       height: 380,
       radius: 22,
-      fillStyle: '#111827',
+      fillStyle: '#324263',
       strokeStyle: '#334155',
-      method: 'fillThenDraw',
     },
   });
 
@@ -69,7 +68,6 @@ async function main() {
     scrawl: {
       fontString: '26px system-ui, sans-serif',
       fillStyle: '#e5e7eb',
-      method: 'fill',
     },
   });
 
