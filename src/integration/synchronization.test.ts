@@ -39,6 +39,23 @@ describe('TimelineSynchronizer', () => {
     expect(events).toEqual(['play', 'pause']);
   });
 
+  test('delegates live playback control to the composition API', () => {
+    const calls: string[] = [];
+    const composition = createComposition({ width: 100, height: 100 });
+    composition.play = () => {
+      calls.push('composition-play');
+    };
+    composition.pause = () => {
+      calls.push('composition-pause');
+    };
+    const sync = createTimelineSynchronizer(composition);
+
+    sync.play();
+    sync.pause();
+
+    expect(calls).toEqual(['composition-play', 'composition-pause']);
+  });
+
   test('seeks timeline, media, layers, and renderer to one time source', async () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5 });
     const layer = composition.addLayer('shape', {

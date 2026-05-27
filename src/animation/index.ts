@@ -123,7 +123,7 @@ export class AnimationController {
     const previous = findPreviousKeyframe(propertyKeyframes, time);
     const startTime = previous?.time ?? 0;
     const duration = config.hold === true ? 0 : Math.max(time - startTime, 0);
-    const tween = this.createTween(layer, binding, value, {
+    const tween = this.createTween(binding, value, {
       duration,
       ease: config.easing ?? defaultEase,
       hold: config.hold ?? false,
@@ -182,7 +182,7 @@ export class AnimationController {
       if (config.yoyo !== undefined) options.yoyo = config.yoyo;
       if (config.onComplete !== undefined) options.onComplete = config.onComplete;
 
-      tweens.push(this.createTween(layer, binding, value, options));
+      tweens.push(this.createTween(binding, value, options));
     }
 
     return createAnimation(createId('animation'), tweens);
@@ -287,7 +287,6 @@ export class AnimationController {
   }
 
   private createTween(
-    layer: Layer,
     binding: PropertyBinding,
     value: number,
     options: {
@@ -306,7 +305,6 @@ export class AnimationController {
       ease: options.ease,
       overwrite: false,
       immediateRender: options.hold === true,
-      onUpdate: () => syncLayerToScrawl(layer),
     };
 
     if (options.repeat !== undefined) vars['repeat'] = options.repeat;

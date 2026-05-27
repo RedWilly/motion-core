@@ -133,8 +133,7 @@ export class TimelineSynchronizer {
   }
 
   play(): void {
-    this.composition.timeline.play();
-    this.composition.renderer.play();
+    this.composition.play();
 
     for (const target of this.media) {
       void target.play?.();
@@ -142,8 +141,7 @@ export class TimelineSynchronizer {
   }
 
   pause(): void {
-    this.composition.timeline.pause();
-    this.composition.renderer.pause();
+    this.composition.pause();
 
     for (const target of this.media) {
       target.pause?.();

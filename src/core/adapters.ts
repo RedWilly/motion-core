@@ -12,7 +12,6 @@ interface MemoryTween extends TimelineTweenAdapter {
   duration: number;
   startValues: Map<string, number>;
   killed: boolean;
-  onUpdate?: () => void;
   onComplete?: () => void;
 }
 
@@ -76,7 +75,6 @@ export class MemoryTimeline implements TimelineAdapter {
     };
     const tween: MemoryTween = baseTween;
 
-    if (typeof vars['onUpdate'] === 'function') tween.onUpdate = vars['onUpdate'] as () => void;
     if (typeof vars['onComplete'] === 'function') tween.onComplete = vars['onComplete'] as () => void;
 
     for (const key of Object.keys(vars)) {
@@ -130,7 +128,6 @@ export class MemoryTimeline implements TimelineAdapter {
         tween.target[key] = startValue + (endValue - startValue) * progress;
       }
 
-      tween.onUpdate?.();
       if (progress >= 1) tween.onComplete?.();
     }
   }

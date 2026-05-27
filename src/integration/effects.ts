@@ -11,7 +11,7 @@ import type {
 import { normalizeScrawlEffectConfig, normalizeScrawlMaskConfig } from '../shared/validation';
 import type { ScrawlFactoryModule } from './scrawl-factories';
 
-export type ScrawlFilterTarget = ScrawlEntityAdapter | ScrawlGroupAdapter;
+type ScrawlFilterTarget = ScrawlEntityAdapter | ScrawlGroupAdapter;
 
 export type {
   ScrawlEffectConfig,
@@ -24,8 +24,6 @@ export type {
 
 export type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 
-export interface ScrawlEffectsController extends ScrawlEffectsAdapter {}
-
 export interface ScrawlEffectsOptions {
   readonly namespace?: string;
 }
@@ -33,7 +31,7 @@ export interface ScrawlEffectsOptions {
 export function createScrawlEffectsController(
   scrawl: Pick<ScrawlFactoryModule, 'makeFilter'>,
   options: ScrawlEffectsOptions = {},
-): ScrawlEffectsController {
+): ScrawlEffectsAdapter {
   if (!scrawl.makeFilter) {
     throw capabilityError(
       'SCRAWL_FILTER_FACTORY_MISSING',

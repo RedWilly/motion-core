@@ -53,7 +53,6 @@ export interface BrowserScrawlAdapterOptions {
 export interface BrowserScrawlAdapter extends EngineAdapters {
   readonly namespace: string;
   readonly canvas: ScrawlCanvasAdapter;
-  renderFrame(): void;
   dispose(): void;
 }
 
@@ -234,9 +233,6 @@ export function createBrowserScrawlAdapter(
       });
       renderer = new BrowserScrawlRenderer(canvas, element, render);
       return renderer;
-    },
-    renderFrame(): void {
-      canvas.render();
     },
     dispose(): void {
       renderer?.kill();
