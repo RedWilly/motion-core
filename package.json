@@ -50,14 +50,14 @@
     "fast-check": "^4.7.0",
     "gsap": "^3.15.0",
     "mediabunny": "^1.44.0",
-    "scrawl-canvas": "^8.18.0",
+    "scrawl-canvas": "^8.19.0",
     "typescript": "^5.9.3",
     "tsup": "^8.5.1"
   },
   "peerDependencies": {
     "gsap": "^3.15.0",
     "mediabunny": "^1.44.0",
-    "scrawl-canvas": "^8.18.0"
+    "scrawl-canvas": "^8.19.0"
   },
   "files": [
     "dist"
