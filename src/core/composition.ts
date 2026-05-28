@@ -19,6 +19,7 @@ import type {
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
   ScrawlGroupAdapter,
+  ShapeLayerState,
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
@@ -177,6 +178,126 @@ function configureLayerEffectMotionTarget(
     if (!changed || controller === undefined || effect.scrawlFilter === undefined) return;
     controller.updateEffect({ id: effect.id, filter: effect.scrawlFilter }, { actions: effect.actions });
   };
+}
+
+function createShapeState(layerConfig: LayerConfig, entity: { set(values: Readonly<Record<string, unknown>>): unknown }): ShapeLayerState | undefined {
+  const config = layerConfig.shape;
+  if (config === undefined) return undefined;
+
+  const fillColor = config.fill?.color ?? config.fillStyle ?? 'rgb(0 0 0 / 1)';
+  const strokeColor = config.stroke?.color ?? config.strokeStyle ?? 'rgb(0 0 0 / 1)';
+  const fill = {
+    color: fillColor,
+    values: {
+      opacity: config.fill?.opacity ?? 1,
+    },
+    apply() {},
+  };
+  const stroke = {
+    color: strokeColor,
+    values: {
+      opacity: config.stroke?.opacity ?? (config.stroke === undefined && config.strokeStyle === undefined ? 0 : 1),
+      width: config.stroke?.width ?? config.lineWidth ?? 1,
+    },
+    apply() {},
+  };
+  let previousFillOpacity = Number.NaN;
+  let previousStrokeOpacity = Number.NaN;
+  let previousStrokeWidth = Number.NaN;
+
+  const shape: ShapeLayerState = {
+    fill,
+    stroke,
+    apply(): void {
+      const fillOpacity = clampUnit(fill.values.opacity);
+      const strokeOpacity = clampUnit(stroke.values.opacity);
+      const strokeWidth = Math.max(stroke.values.width, 0);
+      if (
+        previousFillOpacity === fillOpacity &&
+        previousStrokeOpacity === strokeOpacity &&
+        previousStrokeWidth === strokeWidth
+      ) {
+        return;
+      }
+
+      previousFillOpacity = fillOpacity;
+      previousStrokeOpacity = strokeOpacity;
+      previousStrokeWidth = strokeWidth;
+      entity.set({
+        fillStyle: colorWithOpacity(fill.color, fillOpacity),
+        strokeStyle: colorWithOpacity(stroke.color, strokeOpacity),
+        lineWidth: strokeWidth,
+        method: shapeMethod(fillOpacity, strokeOpacity, strokeWidth),
+      });
+    },
+  };
+
+  fill.apply = shape.apply;
+  stroke.apply = shape.apply;
+  return shape;
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function shapeMethod(fillOpacity: number, strokeOpacity: number, strokeWidth: number): string {
+  const fillVisible = fillOpacity > 0;
+  const strokeVisible = strokeOpacity > 0 && strokeWidth > 0;
+  if (fillVisible && strokeVisible) return 'fillThenDraw';
+  if (strokeVisible) return 'draw';
+  return 'fill';
+}
+
+function colorWithOpacity(color: string, opacity: number): string {
+  const alpha = clampUnit(opacity);
+  const hex = parseHexColor(color);
+  if (hex !== null) return `rgb(${hex.red} ${hex.green} ${hex.blue} / ${alpha})`;
+  const rgb = parseRgbColor(color);
+  if (rgb !== null) return `rgb(${rgb.red} ${rgb.green} ${rgb.blue} / ${alpha})`;
+  return alpha >= 1 ? color : color;
+}
+
+function parseHexColor(color: string): { red: number; green: number; blue: number } | null {
+  const value = color.trim();
+  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
+    return {
+      red: Number.parseInt(`${value[1]}${value[1]}`, 16),
+      green: Number.parseInt(`${value[2]}${value[2]}`, 16),
+      blue: Number.parseInt(`${value[3]}${value[3]}`, 16),
+    };
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return {
+      red: Number.parseInt(value.slice(1, 3), 16),
+      green: Number.parseInt(value.slice(3, 5), 16),
+      blue: Number.parseInt(value.slice(5, 7), 16),
+    };
+  }
+  return null;
+}
+
+function parseRgbColor(color: string): { red: number; green: number; blue: number } | null {
+  const match = color.trim().match(/^rgba?\((.+)\)$/i);
+  if (match === null) return null;
+  const parts = match[1]!
+    .replaceAll(',', ' ')
+    .replace('/', ' ')
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+  if (parts.length < 3) return null;
+  const red = parseCssColorChannel(parts[0]!);
+  const green = parseCssColorChannel(parts[1]!);
+  const blue = parseCssColorChannel(parts[2]!);
+  if (red === null || green === null || blue === null) return null;
+  return { red, green, blue };
+}
+
+function parseCssColorChannel(value: string): number | null {
+  const channel = value.endsWith('%') ? (Number.parseFloat(value) / 100) * 255 : Number.parseFloat(value);
+  if (!Number.isFinite(channel)) return null;
+  return Math.min(Math.max(Math.round(channel), 0), 255);
 }
 
 function writeEffectActionValue(effect: LayerEffectState, key: string, value: number): void {
@@ -410,6 +531,7 @@ export function createComposition(
       const effects = normalizeLayerEffects(layerConfig.effects);
       const mask = normalizeScrawlMaskConfig(layerConfig.mask);
       const precomposition = layerConfig.precomp?.composition ?? null;
+      const shape = createShapeState(layerConfig, entity);
       const scrawlCell = layerConfig.precomp === undefined ? undefined : adapters.createPrecompositionCell?.({
         parent: runtime,
         composition: layerConfig.precomp.composition,
@@ -430,6 +552,7 @@ export function createComposition(
         effects,
         mask,
         precomposition,
+        ...(shape === undefined ? null : { shape }),
         ...(scrawlCell === undefined ? null : { scrawlCell }),
         scrawlEntity: entity,
         scrawlState: createScrawlState(transform, opacity, visible),
@@ -448,6 +571,11 @@ export function createComposition(
       registry.register(layer, entity);
       activeGroup?.addArtefacts?.(entity);
       syncLayerToScrawl(layer);
+      if (layer.shape !== undefined) {
+        layer.shape.apply();
+        registerMotionTarget(layer.shape.fill);
+        registerMotionTarget(layer.shape.stroke);
+      }
       for (const effect of layer.effects) {
         attachLayerEffect(effectsController, layer, effect);
         configureLayerEffectMotionTarget(effectsController, effect);
@@ -572,6 +700,10 @@ export function createComposition(
       for (const effect of layer.effects) {
         detachLayerEffect(effectsController, layer, effect);
         removeMotionTarget(effect);
+      }
+      if (layer.shape !== undefined) {
+        removeMotionTarget(layer.shape.fill);
+        removeMotionTarget(layer.shape.stroke);
       }
       activeGroup?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();

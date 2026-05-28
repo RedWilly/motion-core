@@ -53,7 +53,8 @@ async function main() {
     shape: {
       kind: 'wheel',
       radius: 54,
-      fillStyle: '#f97316',
+      fill: { color: '#f97316', opacity: 0 },
+      stroke: { color: '#ffffff', opacity: 1, width: 3 },
     },
     effects: [
       effectPresets.blur({ id: 'soft-edge', radius: 0 }),
@@ -73,6 +74,8 @@ async function main() {
 
   const controller = createAnimationController(composition);
   const blur = orb.effects[0];
+  const fill = orb.shape?.fill;
+  const stroke = orb.shape?.stroke;
   controller.animate(orb, {
     'position.x': 700,
     rotation: 360,
@@ -83,6 +86,24 @@ async function main() {
     repeat: -1,
     yoyo: true,
   });
+  if (fill !== undefined) {
+    controller.animateTarget(fill, {
+      opacity: 1,
+    }, {
+      duration: 1.1,
+      easing: 'power2.out',
+    });
+  }
+  if (stroke !== undefined) {
+    controller.animateTarget(stroke, {
+      width: 10,
+    }, {
+      duration: 0.7,
+      easing: 'power2.inOut',
+      repeat: -1,
+      yoyo: true,
+    });
+  }
   if (blur !== undefined) {
     controller.animateTarget(blur, {
       radius: 8,

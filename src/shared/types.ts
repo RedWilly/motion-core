@@ -61,7 +61,21 @@ export interface ShapeLayerConfig {
   path?: string;
   fillStyle?: string;
   strokeStyle?: string;
+  lineWidth?: number;
+  fill?: ShapeFillConfig;
+  stroke?: ShapeStrokeConfig;
   method?: string;
+}
+
+export interface ShapeFillConfig {
+  readonly color?: string;
+  readonly opacity?: number;
+}
+
+export interface ShapeStrokeConfig {
+  readonly color?: string;
+  readonly opacity?: number;
+  readonly width?: number;
 }
 
 export interface MediaLayerConfig {
@@ -95,6 +109,7 @@ export interface Layer {
   effects: LayerEffectState[];
   mask: LayerMaskState | null;
   precomposition: Composition | null;
+  shape?: ShapeLayerState;
   scrawlCell?: ScrawlCellAdapter;
   scrawlEntity: ScrawlEntityAdapter;
   scrawlState: ScrawlTransformState;
@@ -200,6 +215,20 @@ export interface LayerMaskConfig extends ScrawlMaskConfig {
 
 export interface MotionStateTarget<TValues extends Record<string, number> = Record<string, number>> {
   readonly values: TValues;
+  apply(): void;
+}
+
+export interface ShapeFillState extends MotionStateTarget<{ opacity: number }> {
+  readonly color: string;
+}
+
+export interface ShapeStrokeState extends MotionStateTarget<{ opacity: number; width: number }> {
+  readonly color: string;
+}
+
+export interface ShapeLayerState {
+  readonly fill: ShapeFillState;
+  readonly stroke: ShapeStrokeState;
   apply(): void;
 }
 

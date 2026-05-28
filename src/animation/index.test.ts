@@ -77,6 +77,37 @@ describe('AnimationController', () => {
     expect(updates.at(-1)).toMatchObject({ actions: [{ action: 'gaussian-blur', radius: 6 }] });
   });
 
+  test('animates shape fill and stroke state without replacing the Scrawl entity', () => {
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition({ width: 100, height: 100, duration: 4 });
+    const layer = composition.addLayer('shape', {
+      shape: {
+        kind: 'wheel',
+        radius: 20,
+        fill: { color: '#f97316', opacity: 0 },
+        stroke: { color: '#ffffff', opacity: 1, width: 2 },
+      },
+    });
+    layer.scrawlEntity.set = (values) => {
+      setCalls.push({ ...values });
+      return layer.scrawlEntity;
+    };
+    const controller = createAnimationController(composition);
+
+    controller.animateTarget(layer.shape!.fill, { opacity: 1 }, { duration: 2, easing: 'none' });
+    controller.animateTarget(layer.shape!.stroke, { width: 8 }, { duration: 2, easing: 'none' });
+    composition.seek(1);
+
+    expect(layer.shape?.fill.values.opacity).toBe(0.5);
+    expect(layer.shape?.stroke.values.width).toBe(5);
+    expect(setCalls.at(-1)).toMatchObject({
+      fillStyle: 'rgb(249 115 22 / 0.5)',
+      strokeStyle: 'rgb(255 255 255 / 1)',
+      lineWidth: 5,
+      method: 'fillThenDraw',
+    });
+  });
+
   test('adds hold keyframes as zero-duration timeline sets', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);

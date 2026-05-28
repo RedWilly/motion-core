@@ -49,11 +49,12 @@ function shapeFactory(scrawl: ScrawlFactoryModule): LayerEntityFactory {
       width: config?.width,
       height: config?.height,
       radius: config?.radius,
-      pathDefinition: config?.path,
-      fillStyle: config?.fillStyle,
-      strokeStyle: config?.strokeStyle,
-      method: config?.method ?? 'fill',
-    };
+	      pathDefinition: config?.path,
+	      fillStyle: config?.fill?.color ?? config?.fillStyle,
+	      strokeStyle: config?.stroke?.color ?? config?.strokeStyle,
+	      lineWidth: config?.stroke?.width ?? config?.lineWidth,
+	      method: config?.method ?? initialShapeMethod(config),
+	    };
 
     switch (config?.kind ?? 'block') {
       case 'wheel':
@@ -66,6 +67,13 @@ function shapeFactory(scrawl: ScrawlFactoryModule): LayerEntityFactory {
         return scrawl.makeBlock(base);
     }
   };
+}
+
+function initialShapeMethod(config: LayerEntityFactoryContext['config']['shape']): string {
+  if (config?.stroke !== undefined || config?.strokeStyle !== undefined || config?.lineWidth !== undefined) {
+    return 'fillThenDraw';
+  }
+  return 'fill';
 }
 
 function pictureFactory(scrawl: ScrawlFactoryModule, assetKey: 'imageSource' | 'videoSource'): LayerEntityFactory {
