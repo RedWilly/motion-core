@@ -29,7 +29,7 @@ async function main() {
     adapters,
   );
 
-  composition.addLayer('shape', {
+  composition.addShape({
     name: 'background-panel',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 150, y: 90 } },
     shape: {
@@ -41,7 +41,7 @@ async function main() {
     },
   });
 
-  composition.addLayer('shape', {
+  composition.addShape({
     name: 'accent-wheel',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 0, y: 0 } },
     shape: {

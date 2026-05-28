@@ -74,6 +74,52 @@ describe('createComposition', () => {
     expect(composition.layers).not.toContain(child);
   });
 
+  test('tracks layer source assets and removes owned assets with the layer', () => {
+    const calls: string[] = [];
+    const composition = createComposition({ width: 100, height: 100 });
+    const image = composition.addImage('/plate.png', { name: 'plate' });
+    const video = composition.addVideo('/clip.mp4', { name: 'clip' });
+
+    composition.registerAsset({
+      id: `${video.id}:decoded-frame`,
+      kind: 'raw',
+      sourceType: 'generated',
+      ownerLayerId: video.id,
+      label: 'clip frame cache',
+      dispose() {
+        calls.push('dispose-frame');
+      },
+    });
+    composition.removeLayer(video);
+
+    expect(image.type).toBe('image');
+    expect(composition.assets).toEqual([
+      {
+        id: `${image.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: image.id,
+        source: '/plate.png',
+        label: 'plate',
+      },
+    ]);
+    expect(calls).toEqual(['dispose-frame']);
+  });
+
+  test('exposes high-level layer creation helpers', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const shape = composition.addShape({ name: 'box', shape: { kind: 'rectangle' } });
+    const text = composition.addText('Hello', { name: 'title' });
+    const audio = composition.addAudio('/voice.wav', { name: 'voice' });
+    const svg = composition.addSvg('/mark.svg', { name: 'mark' });
+
+    expect(shape.type).toBe('shape');
+    expect(text.config.text).toBe('Hello');
+    expect(audio.type).toBe('audio');
+    expect(svg.type).toBe('svg');
+    expect(composition.assets.map((asset) => asset.kind)).toEqual(['audio', 'svg']);
+  });
+
   test('maps child layers to Scrawl pivot and mimic state', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const parent = composition.addLayer('shape', {

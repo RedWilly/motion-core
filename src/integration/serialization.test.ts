@@ -80,7 +80,14 @@ describe('serialization', () => {
     expect(payload.layers[0]?.scrawlEntityName).toBe('box');
     expect(payload.layers[0]?.scrawlPacket).toContain('box');
     expect(payload.assets).toEqual([
-      { id: `${payload.layers[1]?.id}:source`, layerId: payload.layers[1]?.id, type: 'image', source: 'asset.png' },
+      {
+        id: `${payload.layers[1]?.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: payload.layers[1]?.id,
+        source: 'asset.png',
+        label: 'image',
+      },
     ]);
   });
 
@@ -158,6 +165,37 @@ describe('serialization', () => {
 
     expect(hydrated.width).toBe(10);
     expect(hydrated.height).toBe(10);
+  });
+
+  test('hydrates serialized asset ownership without temporary layer ids', () => {
+    const original = createComposition({ width: 100, height: 100 });
+    const image = original.addImage('asset.png', { name: 'plate' });
+    original.registerAsset({
+      id: 'style:orb-gradient',
+      kind: 'style',
+      sourceType: 'generated',
+      label: 'orb-gradient',
+    });
+
+    const hydrated = deserializeComposition(serializeComposition(original));
+
+    expect(hydrated.layers[0]?.id).toBe(image.id);
+    expect(hydrated.assets).toEqual([
+      {
+        id: `${image.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: image.id,
+        source: 'asset.png',
+        label: 'plate',
+      },
+      {
+        id: 'style:orb-gradient',
+        kind: 'style',
+        sourceType: 'generated',
+        label: 'orb-gradient',
+      },
+    ]);
   });
 
   test('serializes effects and layer mask relationships added through the core API', () => {

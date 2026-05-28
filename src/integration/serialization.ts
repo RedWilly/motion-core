@@ -1,6 +1,7 @@
 import { validationError } from '../shared/errors';
 import type {
   Composition,
+  CompositionAsset,
   CompositionConfig,
   EngineAdapters,
   Layer,
@@ -60,7 +61,7 @@ export function serializeComposition(composition: Composition): string {
       time: composition.timeline.time(),
       duration: composition.timeline.duration(),
     },
-    assets: serializeAssets(composition.layers),
+    assets: composition.assets.map(serializeAsset),
   };
 
   return JSON.stringify(payload);
@@ -114,6 +115,7 @@ export function hydrateSerializedComposition(
     if (layerPayload.scrawlPacket !== undefined) adapters.importScrawlPacket?.(layerPayload.scrawlPacket);
   }
 
+  hydrateAssets(composition, payload.assets);
   composition.timeline.duration(payload.timeline.duration);
   composition.seek(payload.timeline.time);
 
@@ -191,20 +193,32 @@ function serializeEnhancedTextConfig(config: Readonly<EnhancedTextLayerConfig>):
   return serialized;
 }
 
-function serializeAssets(layers: ReadonlyArray<Layer>): SerializedAsset[] {
-  const assets: SerializedAsset[] = [];
+function serializeAsset(asset: Readonly<CompositionAsset>): SerializedAsset {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    sourceType: asset.sourceType,
+    ...(asset.ownerLayerId === undefined ? null : { ownerLayerId: asset.ownerLayerId }),
+    ...(asset.source === undefined ? null : { source: asset.source }),
+    ...(asset.label === undefined ? null : { label: asset.label }),
+  };
+}
 
-  for (const layer of layers) {
-    if (layer.source === undefined) continue;
-    assets.push({
-      id: `${layer.id}:source`,
-      layerId: layer.id,
-      type: layer.type,
-      source: layer.source,
-    });
+function hydrateAssets(composition: Composition, assets: readonly SerializedAsset[]): void {
+  for (const asset of [...composition.assets]) {
+    composition.removeAsset(asset);
   }
 
-  return assets;
+  for (const asset of assets) {
+    composition.registerAsset({
+      id: asset.id,
+      kind: asset.kind,
+      sourceType: asset.sourceType,
+      ...(asset.ownerLayerId === undefined ? null : { ownerLayerId: asset.ownerLayerId }),
+      ...(asset.source === undefined ? null : { source: asset.source }),
+      ...(asset.label === undefined ? null : { label: asset.label }),
+    });
+  }
 }
 
 function deserializeLayerConfig(

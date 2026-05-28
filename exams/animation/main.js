@@ -34,8 +34,8 @@ async function main() {
     adapters,
   );
 
-	  const stage = composition.addLayer('shape', {
-	    name: 'stage',
+  const stage = composition.addShape({
+    name: 'stage',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 360, y: 190 } },
     shape: {
       kind: 'rectangle',
@@ -45,7 +45,7 @@ async function main() {
       fillStyle: '#324263',
       strokeStyle: '#334155',
     },
-	  });
+  });
 
   const orbGradient = composition.createGradient({
     id: 'orb-gradient',
@@ -62,7 +62,7 @@ async function main() {
     paletteEnd: 999,
   });
 
-  const orb = composition.addLayer('shape', {
+  const orb = composition.addShape({
     name: 'animated-orb',
     transform: { position: { x: 260, y: 270 }, anchor: { x: 0, y: 0 } },
     shape: {
@@ -77,10 +77,9 @@ async function main() {
     ],
   });
 
-  const label = composition.addLayer('text', {
+  const label = composition.addText('motion-core + Scrawl-canvas', {
     name: 'label',
     transform: { position: { x: 480, y: 420 }, anchor: { x: 0, y: 0 } },
-    text: 'motion-core + Scrawl-canvas',
     scrawl: {
       fontString: '26px system-ui, sans-serif',
       fillStyle: '#e5e7eb',

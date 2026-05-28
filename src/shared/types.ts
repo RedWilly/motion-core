@@ -145,6 +145,20 @@ export interface Layer {
   scrawlState: ScrawlTransformState;
 }
 
+export type CompositionAssetKind = 'image' | 'video' | 'audio' | 'svg' | 'raw' | 'style';
+
+export type CompositionAssetSourceType = 'url' | 'generated';
+
+export interface CompositionAsset {
+  readonly id: string;
+  readonly kind: CompositionAssetKind;
+  readonly sourceType: CompositionAssetSourceType;
+  readonly ownerLayerId?: string;
+  readonly source?: string;
+  readonly label?: string;
+  dispose?(): void;
+}
+
 export interface PrecompositionLayerConfig {
   readonly composition: Composition;
   readonly timeOffset?: number;
@@ -382,10 +396,17 @@ export interface Composition {
   frameRate: number;
   backgroundColor: string;
   layers: Layer[];
+  assets: CompositionAsset[];
   timeline: TimelineAdapter;
   renderer: RenderAdapter;
   addLayer(type: LayerType, config?: LayerConfig): Layer;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
+  addImage(source: string, config?: LayerConfig): Layer;
+  addVideo(source: string, config?: LayerConfig): Layer;
+  addAudio(source: string, config?: LayerConfig): Layer;
+  addSvg(source: string, config?: LayerConfig): Layer;
+  addShape(config?: LayerConfig): Layer;
+  addText(text: string, config?: LayerConfig): Layer;
   addPrecomposition(composition: Composition, config?: Omit<LayerConfig, 'content' | 'precomp'> & {
     readonly timeOffset?: number;
     readonly playbackRate?: number;
@@ -396,6 +417,8 @@ export interface Composition {
   createGradient(config: ScrawlGradientConfig): ScrawlStyleState;
   createPattern(config: ScrawlPatternConfig): ScrawlStyleState;
   removeStyle(style: ScrawlStyleState): void;
+  registerAsset(asset: CompositionAsset): CompositionAsset;
+  removeAsset(asset: CompositionAsset | string): void;
   registerMotionTarget(target: MotionStateTarget): () => void;
   applyMotionTargets(): void;
   setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
@@ -557,6 +580,7 @@ export interface CompositionRuntime {
   height: number;
   group?: ScrawlGroupAdapter;
   layers: Layer[];
+  assets: CompositionAsset[];
   timeline: TimelineAdapter;
 }
 
@@ -608,7 +632,9 @@ export type SerializedEnhancedTextLayerConfig = Omit<EnhancedTextLayerConfig, 'l
 
 export interface SerializedAsset {
   id: string;
-  layerId: string;
-  type: LayerType;
-  source: string;
+  kind: CompositionAssetKind;
+  sourceType: CompositionAssetSourceType;
+  ownerLayerId?: string;
+  source?: string;
+  label?: string;
 }

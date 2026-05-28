@@ -6,6 +6,8 @@ import { capabilityError } from '../shared/errors';
 import { createId } from '../shared/ids';
 import type {
   Composition,
+  CompositionAsset,
+  CompositionAssetKind,
   CompositionConfig,
   CompositionRuntime,
   EngineAdapters,
@@ -171,6 +173,11 @@ function attachLayerEffect(
   if (controller === undefined) return;
   const handle = controller.addEffect(layer.scrawlEntity, effect);
   effect.scrawlFilter = handle.filter;
+}
+
+function sourceAssetKind(type: LayerType): CompositionAssetKind | undefined {
+  if (type === 'image' || type === 'video' || type === 'audio' || type === 'svg') return type;
+  return undefined;
 }
 
 function configureLayerEffectMotionTarget(
@@ -502,6 +509,7 @@ export function createComposition(
     width: normalized.width,
     height: normalized.height,
     layers: [],
+    assets: [],
     timeline,
   };
   if (activeGroup !== undefined) runtime.group = activeGroup;
@@ -532,6 +540,48 @@ export function createComposition(
     for (const target of motionTargets) target.apply();
   };
 
+  const registerAsset = (asset: CompositionAsset): CompositionAsset => {
+    const existingIndex = runtime.assets.findIndex((item) => item.id === asset.id);
+    if (existingIndex >= 0) {
+      runtime.assets[existingIndex]?.dispose?.();
+      runtime.assets[existingIndex] = asset;
+      return asset;
+    }
+
+    runtime.assets.push(asset);
+    return asset;
+  };
+
+  const removeAsset = (assetOrId: CompositionAsset | string): void => {
+    const id = typeof assetOrId === 'string' ? assetOrId : assetOrId.id;
+    const index = runtime.assets.findIndex((asset) => asset.id === id);
+    if (index < 0) return;
+
+    const [asset] = runtime.assets.splice(index, 1);
+    asset?.dispose?.();
+  };
+
+  const registerLayerSourceAsset = (layer: Layer): void => {
+    const kind = sourceAssetKind(layer.type);
+    if (kind === undefined || layer.source === undefined) return;
+
+    registerAsset({
+      id: `${layer.id}:source`,
+      kind,
+      sourceType: 'url',
+      ownerLayerId: layer.id,
+      source: layer.source,
+      label: layer.name,
+    });
+  };
+
+  const removeLayerAssets = (layer: Layer): void => {
+    for (let index = runtime.assets.length - 1; index >= 0; index -= 1) {
+      const asset = runtime.assets[index];
+      if (asset?.ownerLayerId === layer.id) removeAsset(asset);
+    }
+  };
+
   const syncLiveFrame = (): void => {
     if (livePlayback.running) {
       const elapsedSeconds = (currentTimeMs() - livePlayback.startedAtMs) / 1000;
@@ -551,6 +601,7 @@ export function createComposition(
     frameRate: normalized.frameRate,
     backgroundColor: normalized.backgroundColor,
     layers: runtime.layers,
+    assets: runtime.assets,
     timeline,
     renderer,
 
@@ -616,6 +667,7 @@ export function createComposition(
 
       parent?.children.push(layer);
       this.layers.push(layer);
+      registerLayerSourceAsset(layer);
       registry.register(layer, entity);
       activeGroup?.addArtefacts?.(...layerArtefacts(layer));
       syncLayerToScrawl(layer);
@@ -636,6 +688,30 @@ export function createComposition(
       applyLayerMask(effectsController, layer, layer.mask);
 
       return layer;
+    },
+
+    addImage(source: string, layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('image', source, layerConfig);
+    },
+
+    addVideo(source: string, layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('video', source, layerConfig);
+    },
+
+    addAudio(source: string, layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('audio', source, layerConfig);
+    },
+
+    addSvg(source: string, layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('svg', source, layerConfig);
+    },
+
+    addShape(layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('shape', layerConfig);
+    },
+
+    addText(text: string, layerConfig: LayerConfig = {}): Layer {
+      return this.addLayer('text', { ...layerConfig, text });
     },
 
     addPrecomposition(
@@ -733,6 +809,10 @@ export function createComposition(
       stylesController?.removeStyle(style);
     },
 
+    registerAsset,
+
+    removeAsset,
+
     registerMotionTarget,
 
     applyMotionTargets,
@@ -794,6 +874,7 @@ export function createComposition(
       layer.media?.pause?.();
       layer.media?.dispose?.();
       delete layer.media;
+      removeLayerAssets(layer);
       activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);

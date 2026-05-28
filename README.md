@@ -66,9 +66,8 @@ const composition = createComposition(
   adapters,
 );
 
-const title = composition.addLayer('text', {
+const title = composition.addText('Motion', {
   name: 'title',
-  text: 'Motion',
   transform: {
     position: { x: 960, y: 540 },
     anchor: { x: 0.5, y: 0.5 },
@@ -86,6 +85,30 @@ The browser adapter creates:
 - One Scrawl Render object for preview playback.
 - A Scrawl effects controller through `makeFilter`.
 - Scrawl layer Cells for precomposition layers when the canvas exposes `buildCell`.
+
+Prefer the typed layer helpers for application code:
+
+```ts
+composition.addShape({ name: 'background' });
+composition.addText('Caption', { name: 'caption' });
+composition.addImage('/assets/plate.png', { name: 'plate' });
+composition.addVideo('/assets/clip.mp4', { name: 'clip' });
+composition.addAudio('/assets/voice.wav', { name: 'voice' });
+composition.addSvg('/assets/logo.svg', { name: 'logo' });
+```
+
+`addLayer` remains available as the lower-level primitive when a caller already has a `LayerType` and wants to dispatch dynamically. URL-backed image, video, audio, and SVG layers are registered in `composition.assets` automatically and are removed with their owning layer.
+
+Generated runtime resources can be registered explicitly when the host needs them to appear in serialized project metadata:
+
+```ts
+composition.registerAsset({
+  id: 'style:orb-gradient',
+  kind: 'style',
+  sourceType: 'generated',
+  label: 'orb-gradient',
+});
+```
 
 ## Effects
 
@@ -105,7 +128,7 @@ import {
 
 const composition = createComposition({ width: 1280, height: 720 });
 
-const image = composition.addLayer('image', '/assets/plate.png', {
+const image = composition.addImage('/assets/plate.png', {
   name: 'plate',
   effects: [
     blur({ id: 'soften', radius: 3 }),
@@ -184,7 +207,7 @@ There are two mask workflows in the current API.
 Same-layer masks are applied immediately to the target Scrawl entity:
 
 ```ts
-const foreground = composition.addLayer('shape', {
+const foreground = composition.addShape({
   name: 'foreground',
   shape: {
     kind: 'rectangle',
@@ -207,11 +230,11 @@ composition.setMask(foreground, {
 Layer-to-layer masks are recorded as layer state and serialized:
 
 ```ts
-const target = composition.addLayer('image', '/assets/subject.png', {
+const target = composition.addImage('/assets/subject.png', {
   name: 'subject',
 });
 
-const matte = composition.addLayer('shape', {
+const matte = composition.addShape({
   name: 'subject-matte',
   shape: {
     kind: 'wheel',
@@ -254,9 +277,8 @@ const child = createComposition({
   frameRate: 30,
 });
 
-child.addLayer('text', {
+child.addText('Live', {
   name: 'label',
-  text: 'Live',
 });
 
 const parent = createComposition(
@@ -316,9 +338,9 @@ Serialization currently includes:
 - Layer effect configs from runtime state.
 - Layer mask configs, including layer-to-layer `sourceLayerId`.
 - Timeline time and duration.
-- Asset references from layer sources.
+- Asset metadata from `composition.assets`, including URL-backed layer sources and explicitly registered generated/style assets.
 
-Serialization intentionally does not include live `precomp.composition` object graphs. Nested composition persistence needs an explicit project-file format so it can avoid circular graphs and make asset ownership clear.
+Serialization stores asset references and labels, not opaque runtime objects. A `Blob`, decoded frame cache, WebCodecs handle, Scrawl object instance, or runtime `dispose` callback must be recreated by the host integration after load. Serialization intentionally does not include live `precomp.composition` object graphs. Nested composition persistence needs an explicit project-file format so it can avoid circular graphs and make asset ownership clear.
 
 ## Animation And Sync
 
@@ -336,7 +358,7 @@ const composition = createComposition({
   duration: 5,
 });
 
-const layer = composition.addLayer('shape', {
+const layer = composition.addShape({
   name: 'box',
   transform: {
     position: { x: 100, y: 120 },
@@ -354,6 +376,27 @@ composition.seek(1);
 ```
 
 GSAP timelines support tweens, timelines, easing, callbacks, and stagger-style choreography. This engine does not create independent Scrawl Tweens for layer animation because the project uses GSAP as the single timeline source.
+
+## Media Preview
+
+Video layers can use Scrawl's native Picture video controls when the source is a browser media element. For deterministic decoded-frame preview, the browser adapter exposes a Mediabunny bridge that decodes frames into one reusable Scrawl RawAsset canvas and installs that asset on the video Picture.
+
+```ts
+const video = composition.addVideo('/assets/clip.mp4', {
+  name: 'clip',
+  video: {
+    inPoint: 0,
+    playbackRate: 1,
+  },
+});
+
+await adapters.createVideoFrameBridge(video, '/assets/clip.mp4');
+
+composition.seek(1.25);
+composition.play();
+```
+
+`composition.play()`, `pause()`, and `seek(time)` are the public playback controls. The composition coordinates the GSAP timeline, Scrawl renderer, video frame bridge, and audio bridge through each layer's `media` target.
 
 ## Export
 
