@@ -1,5 +1,5 @@
 import { EngineError, validationError } from '../shared/errors';
-import type { Composition, Layer, TimelineTweenAdapter } from '../shared/types';
+import type { Composition, Layer, MotionStateTarget, TimelineTweenAdapter } from '../shared/types';
 import { createId } from '../shared/ids';
 import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 
@@ -16,6 +16,8 @@ export type AnimatableProperty =
 export type Easing = string | ((progress: number) => number);
 
 export type AnimationValues = Partial<Record<AnimatableProperty, number>>;
+
+export type MotionTargetValues<TValues extends Record<string, number>> = Partial<TValues>;
 
 export interface KeyframeConfig {
   easing?: Easing;
@@ -183,6 +185,45 @@ export class AnimationController {
       if (config.onComplete !== undefined) options.onComplete = config.onComplete;
 
       tweens.push(this.createTween(binding, value, options));
+    }
+
+    return createAnimation(createId('animation'), tweens);
+  }
+
+  animateTarget<TValues extends Record<string, number>>(
+    target: MotionStateTarget<TValues>,
+    values: MotionTargetValues<TValues>,
+    config: AnimationConfig,
+  ): Animation {
+    assertPositiveDuration(config.duration);
+    this.composition.registerMotionTarget(target);
+
+    const tweens: TimelineTweenAdapter[] = [];
+    const position = this.composition.timeline.time() + (config.delay ?? 0);
+    const keys = Object.keys(values) as Array<keyof TValues & string>;
+
+    for (const key of keys) {
+      const value = values[key];
+      if (value === undefined) continue;
+
+      const options: {
+        duration: number;
+        ease: Easing;
+        repeat?: number;
+        yoyo?: boolean;
+        onComplete?: () => void;
+        position: number;
+      } = {
+        duration: config.duration,
+        ease: config.easing ?? defaultEase,
+        position,
+      };
+
+      if (config.repeat !== undefined) options.repeat = config.repeat;
+      if (config.yoyo !== undefined) options.yoyo = config.yoyo;
+      if (config.onComplete !== undefined) options.onComplete = config.onComplete;
+
+      tweens.push(this.createTween({ target: target.values, key }, value, options));
     }
 
     return createAnimation(createId('animation'), tweens);

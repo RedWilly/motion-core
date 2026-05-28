@@ -13,6 +13,7 @@ import type {
   LayerMaskState,
   LayerConfig,
   LayerType,
+  MotionStateTarget,
   PrecompositionLayerConfig,
   RenderAdapter,
   ScrawlEffectConfig,
@@ -151,6 +152,39 @@ function attachLayerEffect(
   if (controller === undefined) return;
   const handle = controller.addEffect(layer.scrawlEntity, effect);
   effect.scrawlFilter = handle.filter;
+}
+
+function configureLayerEffectMotionTarget(
+  controller: ScrawlEffectsAdapter | undefined,
+  effect: LayerEffectState,
+): void {
+  const valueKeys = Object.keys(effect.values);
+  const previousValues: Record<string, number> = {};
+  for (const key of valueKeys) previousValues[key] = effect.values[key]!;
+
+  effect.apply = (): void => {
+    let changed = false;
+
+    for (const key of valueKeys) {
+      const value = effect.values[key]!;
+      if (previousValues[key] === value) continue;
+
+      previousValues[key] = value;
+      writeEffectActionValue(effect, key, value);
+      changed = true;
+    }
+
+    if (!changed || controller === undefined || effect.scrawlFilter === undefined) return;
+    controller.updateEffect({ id: effect.id, filter: effect.scrawlFilter }, { actions: effect.actions });
+  };
+}
+
+function writeEffectActionValue(effect: LayerEffectState, key: string, value: number): void {
+  for (const action of effect.actions) {
+    if (typeof action[key] === 'number') {
+      (action as Record<string, unknown>)[key] = value;
+    }
+  }
 }
 
 function detachLayerEffect(
@@ -309,9 +343,28 @@ export function createComposition(
   if (activeGroup !== undefined) runtime.group = activeGroup;
   const renderer: RenderAdapter = adapters.createRenderer?.(runtime) ?? new NoopRenderer(runtime);
   const rendererDrivesPlayback = renderer.setFrameCallback !== undefined;
+  const motionTargets: MotionStateTarget[] = [];
   const livePlayback = {
     running: false,
     startedAtMs: 0,
+  };
+
+  const registerMotionTarget = (target: MotionStateTarget): (() => void) => {
+    if (!motionTargets.includes(target)) motionTargets.push(target);
+
+    return () => {
+      const index = motionTargets.indexOf(target);
+      if (index >= 0) motionTargets.splice(index, 1);
+    };
+  };
+
+  const removeMotionTarget = (target: MotionStateTarget): void => {
+    const index = motionTargets.indexOf(target);
+    if (index >= 0) motionTargets.splice(index, 1);
+  };
+
+  const applyMotionTargets = (): void => {
+    for (const target of motionTargets) target.apply();
   };
 
   const syncLiveFrame = (): void => {
@@ -321,6 +374,7 @@ export function createComposition(
       timeline.seek(nextTime, true);
     }
     syncCompositionFrame(runtime.layers, timeline.time(), precompositionTimes);
+    applyMotionTargets();
   };
 
   const composition = {
@@ -394,7 +448,11 @@ export function createComposition(
       registry.register(layer, entity);
       activeGroup?.addArtefacts?.(entity);
       syncLayerToScrawl(layer);
-      for (const effect of layer.effects) attachLayerEffect(effectsController, layer, effect);
+      for (const effect of layer.effects) {
+        attachLayerEffect(effectsController, layer, effect);
+        configureLayerEffectMotionTarget(effectsController, effect);
+        registerMotionTarget(effect);
+      }
       applyLayerMask(effectsController, layer, layer.mask);
 
       return layer;
@@ -435,6 +493,8 @@ export function createComposition(
       const effect = normalizeScrawlEffectConfig(config, `effect-${layer.effects.length}`);
       layer.effects.push(effect);
       attachLayerEffect(effectsController, layer, effect);
+      configureLayerEffectMotionTarget(effectsController, effect);
+      registerMotionTarget(effect);
       return effect;
     },
 
@@ -448,13 +508,21 @@ export function createComposition(
       const effect = layer.effects[index];
       if (effect === undefined) return;
       detachLayerEffect(effectsController, layer, effect);
+      removeMotionTarget(effect);
       layer.effects.splice(index, 1);
     },
 
     clearEffects(layer: Layer): void {
-      for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
+      for (const effect of layer.effects) {
+        detachLayerEffect(effectsController, layer, effect);
+        removeMotionTarget(effect);
+      }
       layer.effects.length = 0;
     },
+
+    registerMotionTarget,
+
+    applyMotionTargets,
 
     setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
       detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
@@ -501,7 +569,10 @@ export function createComposition(
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       this.clearMask(layer);
       detachMaskFeather(effectsController, layer);
-      for (const effect of layer.effects) detachLayerEffect(effectsController, layer, effect);
+      for (const effect of layer.effects) {
+        detachLayerEffect(effectsController, layer, effect);
+        removeMotionTarget(effect);
+      }
       activeGroup?.removeArtefacts?.(layer.scrawlEntity);
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);
@@ -546,6 +617,7 @@ export function createComposition(
       livePlayback.running = false;
       this.timeline.seek(time);
       syncCompositionFrame(this.layers, time, precompositionTimes);
+      applyMotionTargets();
       void this.renderer.renderFrame();
     },
 

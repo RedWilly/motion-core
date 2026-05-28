@@ -198,7 +198,12 @@ export interface LayerMaskConfig extends ScrawlMaskConfig {
   readonly strategy?: LayerMaskStrategy;
 }
 
-export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'> {
+export interface MotionStateTarget<TValues extends Record<string, number> = Record<string, number>> {
+  readonly values: TValues;
+  apply(): void;
+}
+
+export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'>, MotionStateTarget {
   readonly id: string;
   scrawlFilter?: ScrawlFilterAdapter;
 }
@@ -260,6 +265,8 @@ export interface Composition {
   addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
   removeEffect(layer: Layer, effect: LayerEffectState | string): void;
   clearEffects(layer: Layer): void;
+  registerMotionTarget(target: MotionStateTarget): () => void;
+  applyMotionTargets(): void;
   setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
   setLayerMask(targetLayer: Layer, sourceLayer: Layer, config?: Omit<LayerMaskConfig, 'sourceLayerId'>): LayerMaskState;
   clearMask(layer: Layer): void;

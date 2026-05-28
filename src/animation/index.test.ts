@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
 import { syncToTimelineTime } from '../integration/synchronization';
+import type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 import { createAnimationController, createExpressionRenderHook } from './index';
 
 function createObservedLayer() {
@@ -29,6 +30,51 @@ describe('AnimationController', () => {
     expect(layer.opacity).toBe(0.75);
     expect(setCalls.at(-1)?.['startX']).toBe(50);
     expect(setCalls.at(-1)?.['globalAlpha']).toBe(0.75);
+  });
+
+  test('animates effect state as a stable motion target on seek', () => {
+    const updates: Array<Readonly<Record<string, unknown>>> = [];
+    const effects: ScrawlEffectsAdapter = {
+      createEffect(config): ScrawlEffectHandle {
+        return {
+          id: config.id ?? 'effect',
+          filter: {
+            name: `${config.id ?? 'effect'}-filter`,
+            set(values) {
+              updates.push(values);
+            },
+          },
+        };
+      },
+      addEffect(_target, config) {
+        return this.createEffect(config);
+      },
+      updateEffect(effect, values) {
+        effect.filter.set?.(values);
+      },
+      removeEffect() {},
+      clearEffects() {},
+      applyMask() {
+        return undefined;
+      },
+    };
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 4 },
+      { createEffectsController: () => effects },
+    );
+    const layer = composition.addLayer('shape');
+    const blur = composition.addEffect(layer, {
+      id: 'soft',
+      actions: [{ action: 'gaussian-blur', radius: 0 }],
+    });
+    const controller = createAnimationController(composition);
+
+    controller.animateTarget(blur, { radius: 12 }, { duration: 2, easing: 'none' });
+    composition.seek(1);
+
+    expect(blur.values.radius).toBe(6);
+    expect(blur.actions[0]?.radius).toBe(6);
+    expect(updates.at(-1)).toMatchObject({ actions: [{ action: 'gaussian-blur', radius: 6 }] });
   });
 
   test('adds hold keyframes as zero-duration timeline sets', () => {

@@ -125,12 +125,12 @@ describe('serialization', () => {
     expect(hydrated.layers[1]?.parent).toBe(hydrated.layers[0]);
     expect(hydrated.layers[1]?.opacity).toBe(0.5);
     expect(hydrated.layers[1]?.config.text).toBe('Hello');
-    expect(hydrated.layers[1]?.effects).toEqual([
-      {
-        id: 'edge',
-        actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
-      },
-    ]);
+    expect(hydrated.layers[1]?.effects[0]).toMatchObject({
+      id: 'edge',
+      actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
+      values: { level: 6 },
+    });
+    expect(typeof hydrated.layers[1]?.effects[0]?.apply).toBe('function');
     expect(hydrated.layers[1]?.mask).toEqual({ mode: 'clip', strategy: 'entity', feather: 1 });
     expect(hydrated.timeline.time()).toBe(1);
     expect(packets).toHaveLength(2);

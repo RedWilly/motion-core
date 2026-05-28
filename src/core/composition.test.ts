@@ -110,10 +110,18 @@ describe('createComposition', () => {
     action.radius = 99;
     high[0] = 0;
 
-    expect(layer.effects).toEqual([
-      { id: 'effect-0', actions: [{ action: 'gaussian-blur', radius: 4 }], opacity: 0.5 },
-      { id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] },
-    ]);
+    expect(layer.effects[0]).toMatchObject({
+      id: 'effect-0',
+      actions: [{ action: 'gaussian-blur', radius: 4 }],
+      opacity: 0.5,
+      values: { radius: 4 },
+    });
+    expect(layer.effects[1]).toMatchObject({
+      id: 'edge',
+      actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
+      values: { level: 6 },
+    });
+    expect(typeof layer.effects[0]?.apply).toBe('function');
     expect(layer.mask).toEqual({ mode: 'destination-in', strategy: 'entity', opacity: 0.75, feather: 2, memoize: true });
   });
 

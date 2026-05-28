@@ -83,6 +83,7 @@ export async function syncToTimelineTime(
   for (const layer of composition.layers) {
     syncLayerToScrawl(layer);
   }
+  composition.applyMotionTargets();
 
   for (const target of options.media ?? []) {
     await target.seek(time);
@@ -166,6 +167,7 @@ export class TimelineSynchronizer {
 
   private syncLayers(): void {
     for (const layer of this.composition.layers) syncLayerToScrawl(layer);
+    this.composition.applyMotionTargets();
   }
 
   private async seekMedia(time: number): Promise<void> {

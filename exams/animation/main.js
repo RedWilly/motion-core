@@ -56,7 +56,7 @@ async function main() {
       fillStyle: '#f97316',
     },
     effects: [
-      effectPresets.blur({ id: 'soft-edge', radius: 2 }),
+      effectPresets.blur({ id: 'soft-edge', radius: 0 }),
       effectPresets.saturation({ id: 'warmth', level: 1.25 }),
     ],
   });
@@ -72,6 +72,7 @@ async function main() {
   });
 
   const controller = createAnimationController(composition);
+  const blur = orb.effects[0];
   controller.animate(orb, {
     'position.x': 700,
     rotation: 360,
@@ -82,6 +83,16 @@ async function main() {
     repeat: -1,
     yoyo: true,
   });
+  if (blur !== undefined) {
+    controller.animateTarget(blur, {
+      radius: 8,
+    }, {
+      duration: 1.2,
+      easing: 'power2.inOut',
+      repeat: -1,
+      yoyo: true,
+    });
+  }
   controller.animate(label, {
     'position.y': 398,
   }, {

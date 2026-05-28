@@ -90,6 +90,8 @@ export function normalizeScrawlEffectConfig(
   return {
     id: normalizeEffectId(config.id, fallbackId),
     actions: config.actions.map(cloneFilterAction),
+    values: createEffectValues(config.actions),
+    apply() {},
     ...(config.opacity === undefined ? null : { opacity: config.opacity }),
   };
 }
@@ -143,4 +145,17 @@ function cloneFilterAction(action: ScrawlFilterAction): ScrawlFilterAction {
     cloned[key] = Array.isArray(value) ? [...value] : value;
   }
   return cloned as ScrawlFilterAction;
+}
+
+function createEffectValues(actions: readonly ScrawlFilterAction[]): Record<string, number> {
+  const values: Record<string, number> = {};
+
+  for (const action of actions) {
+    for (const [key, value] of Object.entries(action)) {
+      if (key === 'action' || typeof value !== 'number' || !Number.isFinite(value)) continue;
+      values[key] = value;
+    }
+  }
+
+  return values;
 }
