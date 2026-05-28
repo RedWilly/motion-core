@@ -7,3 +7,4 @@ export * from './scrawl-factories';
 export * from './serialization';
 export * from './synchronization';
 export * from './styles';
+export * from './video-frames';

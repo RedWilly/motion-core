@@ -791,6 +791,9 @@ export function createComposition(
         removeMotionTarget(layer.shape.stroke);
       }
       if (layer.textState !== undefined) removeMotionTarget(layer.textState);
+      layer.media?.pause?.();
+      layer.media?.dispose?.();
+      delete layer.media;
       activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);

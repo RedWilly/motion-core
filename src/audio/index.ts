@@ -1,4 +1,4 @@
-import type { AudioLayerConfig } from '../shared/types';
+import type { AudioLayerConfig, Layer, MediaSyncTarget } from '../shared/types';
 import { capabilityError, validationError } from '../shared/errors';
 
 export type AudioFftSize = 512 | 1024 | 2048 | 4096;
@@ -48,13 +48,15 @@ export interface FrequencyAnalysisOptions {
 
 export interface AudioLayerBridgeConfig extends AudioLayerConfig {
   analysis?: AudioAnalysisConfig;
+  name?: string;
 }
 
-export interface AudioLayerBridge {
+export interface AudioLayerBridge extends MediaSyncTarget {
+  readonly kind: 'audio';
   readonly analyzer: AudioAnalyzer;
   analyze(): Readonly<AudioAnalysisFrame>;
   analyzeInto(target: AudioAnalysisFrame): AudioAnalysisFrame;
-  play(compositionTime: number): Promise<void>;
+  play(compositionTime?: number): Promise<void>;
   pause(): void;
   seek(compositionTime: number): Promise<void>;
   dispose(): void;
@@ -191,11 +193,28 @@ export async function createMediabunnyAudioBridge(
     const gain = context.createGain();
     const analyzer = createAudioAnalyzer(context, gain, config.analysis);
 
-    return new MediabunnyAudioLayerBridge(input, sink, context, gain, analyzer, playback, duration);
+    return new MediabunnyAudioLayerBridge(config.name ?? 'audio', input, sink, context, gain, analyzer, playback, duration);
   } catch (error) {
     input.dispose();
     throw error;
   }
+}
+
+export function attachAudioBridgeToLayer(layer: Layer, bridge: AudioLayerBridge): AudioLayerBridge {
+  if (layer.type !== 'audio') {
+    throw validationError('AUDIO_LAYER_REQUIRED', 'Audio bridge can only be attached to an audio layer.', {
+      propertyName: 'layer.type',
+      value: layer.type,
+    });
+  }
+
+  if (layer.media !== bridge) {
+    layer.media?.pause?.();
+    layer.media?.dispose?.();
+    layer.media = bridge;
+  }
+
+  return bridge;
 }
 
 class WebAudioAnalyzer implements AudioAnalyzer {
@@ -240,6 +259,8 @@ class WebAudioAnalyzer implements AudioAnalyzer {
 }
 
 class MediabunnyAudioLayerBridge implements AudioLayerBridge {
+  readonly kind = 'audio';
+  readonly name: string;
   readonly analyzer: AudioAnalyzer;
   private readonly input: AudioInputLike;
   private readonly sink: AudioBufferSinkLike;
@@ -248,9 +269,11 @@ class MediabunnyAudioLayerBridge implements AudioLayerBridge {
   private readonly config: AudioPlaybackConfig;
   private readonly duration: number;
   private currentSource: AudioBufferSourceNode | null = null;
+  private currentTime = 0;
   private disposed = false;
 
   constructor(
+    name: string,
     input: AudioInputLike,
     sink: AudioBufferSinkLike,
     context: AudioContext,
@@ -259,6 +282,7 @@ class MediabunnyAudioLayerBridge implements AudioLayerBridge {
     config: AudioPlaybackConfig,
     duration: number,
   ) {
+    this.name = name;
     this.input = input;
     this.sink = sink;
     this.context = context;
@@ -276,9 +300,14 @@ class MediabunnyAudioLayerBridge implements AudioLayerBridge {
     return this.analyzer.analyzeInto(target);
   }
 
-  async play(compositionTime: number): Promise<void> {
+  getCurrentTime(): number {
+    return this.currentTime;
+  }
+
+  async play(compositionTime = this.currentTime): Promise<void> {
     this.assertActive();
     this.pause();
+    this.currentTime = compositionTime;
 
     const mediaTime = mapCompositionTimeToSourceTime(compositionTime, this.config);
     if (mediaTime === null) return;
@@ -314,6 +343,7 @@ class MediabunnyAudioLayerBridge implements AudioLayerBridge {
   async seek(compositionTime: number): Promise<void> {
     this.assertActive();
     this.pause();
+    this.currentTime = compositionTime;
     const mediaTime = mapCompositionTimeToSourceTime(compositionTime, this.config);
     if (mediaTime !== null) await this.sink.getBuffer(mediaTime);
   }

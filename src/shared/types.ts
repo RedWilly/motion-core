@@ -370,6 +370,7 @@ export interface MediaSyncTarget {
   seek(time: number): void | Promise<void>;
   play?(): void | Promise<void>;
   pause?(): void;
+  dispose?(): void;
 }
 
 export interface Composition {

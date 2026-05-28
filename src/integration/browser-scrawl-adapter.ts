@@ -5,6 +5,7 @@ import type {
   RenderAdapter,
   ScrawlCellAdapter,
   ScrawlGroupAdapter,
+  Layer,
 } from '../shared/types';
 import {
   createScrawlEntityFactories,
@@ -12,6 +13,7 @@ import {
 } from './scrawl-factories';
 import { createScrawlEffectsController } from './effects';
 import { createScrawlStylesController } from './styles';
+import { createMediabunnyVideoFrameBridge, type ScrawlVideoFrameModule, type VideoFrameBridge, type VideoFrameBridgeConfig, type VideoFrameSource } from './video-frames';
 
 type CanvasFit = 'none' | 'contain' | 'cover' | 'fill';
 
@@ -36,6 +38,7 @@ export interface ScrawlBrowserModule extends ScrawlFactoryModule {
   findCanvas(name: string): ScrawlCanvasAdapter | undefined;
   getCanvas(name: string): ScrawlCanvasAdapter | undefined;
   importPacket?(packet: string): unknown;
+  makeRawAsset: ScrawlVideoFrameModule['makeRawAsset'];
   makeRender(items: Readonly<Record<string, unknown>>): ScrawlRenderAdapter;
   purge(namespace: string): void;
   setCurrentCanvas?(canvas: ScrawlCanvasAdapter | string): void;
@@ -54,6 +57,7 @@ export interface BrowserScrawlAdapterOptions {
 export interface BrowserScrawlAdapter extends EngineAdapters {
   readonly namespace: string;
   readonly canvas: ScrawlCanvasAdapter;
+  createVideoFrameBridge(layer: Layer, source: VideoFrameSource, config?: VideoFrameBridgeConfig): Promise<VideoFrameBridge>;
   dispose(): void;
 }
 
@@ -225,6 +229,9 @@ export function createBrowserScrawlAdapter(
     },
     createStylesController() {
       return createScrawlStylesController(scrawl, { namespace });
+    },
+    createVideoFrameBridge(layer, source, config) {
+      return createMediabunnyVideoFrameBridge(layer, source, scrawl, config);
     },
     createRenderer(composition: CompositionRuntime): RenderAdapter {
       const render = scrawl.makeRender({

@@ -275,6 +275,31 @@ describe('createComposition', () => {
     expect(events).toContain('pause');
   });
 
+  test('disposes layer media when removing a layer', () => {
+    const events: string[] = [];
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('video', 'clip.mp4');
+    layer.media = {
+      kind: 'video',
+      name: 'clip',
+      getCurrentTime: () => 0,
+      seek() {
+        events.push('seek');
+      },
+      pause() {
+        events.push('pause');
+      },
+      dispose() {
+        events.push('dispose');
+      },
+    };
+
+    composition.removeLayer(layer);
+
+    expect(layer.media).toBeUndefined();
+    expect(events).toEqual(['pause', 'dispose']);
+  });
+
   test('records layer-to-layer mask workflow without attaching unsafe entity clipping', () => {
     const { adapter, calls } = createFakeEffectsAdapter();
     const maskCellCalls: string[] = [];

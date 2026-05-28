@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { createComposition } from '../core';
 import {
   analyzeFrequencyBands,
+  attachAudioBridgeToLayer,
   createAudioAnalyzer,
   createEmptyAudioAnalysisFrame,
   createMediabunnyAudioBridge,
@@ -240,6 +242,9 @@ describe('Mediabunny audio bridge', () => {
 
     await bridge.play(1);
 
+    expect(bridge.kind).toBe('audio');
+    expect(bridge.name).toBe('audio');
+    expect(bridge.getCurrentTime()).toBe(1);
     expect(requestedTimes).toEqual([3]);
     expect(context.sources).toHaveLength(1);
     expect(context.sources[0]?.buffer).toBe(audioBuffer);
@@ -288,9 +293,56 @@ describe('Mediabunny audio bridge', () => {
 
     await bridge.seek(0.25);
 
+    expect(bridge.getCurrentTime()).toBe(0.25);
     expect(requestedTimes).toEqual([0.75]);
     expect(context.sources).toHaveLength(0);
     bridge.dispose();
+  });
+
+  test('attaches audio bridges to audio layers as disposable media targets', async () => {
+    const context = new FakeAudioContext();
+    const disposeEvents: string[] = [];
+    const runtime: MediabunnyAudioRuntime = {
+      ALL_FORMATS: null,
+      AudioBufferSink: class {
+        constructor(_audioTrack: unknown) {}
+        async getBuffer(): Promise<null> {
+          return null;
+        }
+      },
+      BlobSource: class {},
+      Input: class {
+        async getDurationFromMetadata(): Promise<number | null> {
+          return 2;
+        }
+        async computeDuration(): Promise<number> {
+          return 2;
+        }
+        async getPrimaryAudioTrack(): Promise<unknown> {
+          return {};
+        }
+        dispose(): void {
+          disposeEvents.push('input');
+        }
+      },
+    };
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('audio', 'voice.wav');
+    const bridge = await createMediabunnyAudioBridge(
+      new Blob(['audio']),
+      context as unknown as AudioContext,
+      { name: 'voice' },
+      async () => runtime,
+    );
+
+    attachAudioBridgeToLayer(layer, bridge);
+    await layer.media?.seek(0.75);
+    composition.removeLayer(layer);
+
+    expect(layer.media).toBeUndefined();
+    expect(bridge.name).toBe('voice');
+    expect(bridge.getCurrentTime()).toBe(0.75);
+    expect(disposeEvents).toEqual(['input']);
   });
 
   test('rejects media without an audio track and invalid playback config', async () => {
