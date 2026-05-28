@@ -10,6 +10,8 @@ import type {
   SerializedLayerConfig,
   ScrawlEffectConfig,
   LayerMaskConfig,
+  EnhancedTextLayerConfig,
+  SerializedEnhancedTextLayerConfig,
 } from '../shared/types';
 
 type SerializedLayer = SerializedComposition['layers'][number];
@@ -129,6 +131,7 @@ function serializeLayerConfig(layer: Readonly<Layer>): SerializedLayerConfig {
   if (config.scrawl !== undefined) serialized.scrawl = config.scrawl;
   if (config.textMode !== undefined) serialized.textMode = config.textMode;
   if (config.text !== undefined) serialized.text = config.text;
+  if (config.enhancedText !== undefined) serialized.enhancedText = serializeEnhancedTextConfig(config.enhancedText);
   if (config.variant !== undefined) serialized.variant = config.variant;
   if (layer.effects.length > 0) serialized.effects = layer.effects.map(serializeEffectConfig);
   if (layer.mask !== null) serialized.mask = serializeMaskConfig(layer.mask);
@@ -153,6 +156,39 @@ function serializeMaskConfig(mask: Readonly<NonNullable<Layer['mask']>>): LayerM
     ...(mask.feather === undefined ? null : { feather: mask.feather }),
     ...(mask.memoize === undefined ? null : { memoize: mask.memoize }),
   };
+}
+
+function serializeEnhancedTextConfig(config: Readonly<EnhancedTextLayerConfig>): SerializedEnhancedTextLayerConfig {
+  const serialized: Omit<SerializedEnhancedTextLayerConfig, 'layoutTemplate' | 'layoutTemplateLayerId'> & {
+    layoutTemplate?: string;
+    layoutTemplateLayerId?: string;
+  } = {
+    ...(config.fontString === undefined ? null : { fontString: config.fontString }),
+    ...(config.fillStyle === undefined ? null : { fillStyle: config.fillStyle }),
+    ...(config.strokeStyle === undefined ? null : { strokeStyle: config.strokeStyle }),
+    ...(config.lineWidth === undefined ? null : { lineWidth: config.lineWidth }),
+    ...(config.method === undefined ? null : { method: config.method }),
+    ...(config.useLayoutTemplateAsPath === undefined ? null : { useLayoutTemplateAsPath: config.useLayoutTemplateAsPath }),
+    ...(config.pathPosition === undefined ? null : { pathPosition: config.pathPosition }),
+    ...(config.alignment === undefined ? null : { alignment: config.alignment }),
+    ...(config.lineSpacing === undefined ? null : { lineSpacing: config.lineSpacing }),
+    ...(config.lineAdjustment === undefined ? null : { lineAdjustment: config.lineAdjustment }),
+    ...(config.breakTextOnSpaces === undefined ? null : { breakTextOnSpaces: config.breakTextOnSpaces }),
+    ...(config.breakWordsOnHyphens === undefined ? null : { breakWordsOnHyphens: config.breakWordsOnHyphens }),
+    ...(config.justifyLine === undefined ? null : { justifyLine: config.justifyLine }),
+    ...(config.textUnitFlow === undefined ? null : { textUnitFlow: config.textUnitFlow }),
+    ...(config.startTextOnLine === undefined ? null : { startTextOnLine: config.startTextOnLine }),
+  };
+
+  if (typeof config.layoutTemplate === 'string') {
+    serialized.layoutTemplate = config.layoutTemplate;
+  } else if (config.layoutTemplate !== undefined && isLayerReference(config.layoutTemplate)) {
+    serialized.layoutTemplateLayerId = config.layoutTemplate.id;
+  } else if (config.layoutTemplate !== undefined) {
+    serialized.layoutTemplate = config.layoutTemplate.name;
+  }
+
+  return serialized;
 }
 
 function serializeAssets(layers: ReadonlyArray<Layer>): SerializedAsset[] {
@@ -185,6 +221,7 @@ function deserializeLayerConfig(
 
   return {
     ...base,
+    ...(base.enhancedText === undefined ? null : { enhancedText: deserializeEnhancedTextConfig(base.enhancedText, layersById) }),
     name: layerPayload.name,
     transform: layerPayload.transform,
     visible: layerPayload.visible,
@@ -193,6 +230,27 @@ function deserializeLayerConfig(
     ...(layerPayload.content === undefined ? null : { content: layerPayload.content }),
     ...(parent === null || parent === undefined ? null : { parent }),
   };
+}
+
+function deserializeEnhancedTextConfig(
+  config: Readonly<SerializedEnhancedTextLayerConfig>,
+  layersById: ReadonlyMap<string, Layer>,
+): EnhancedTextLayerConfig {
+  const { layoutTemplateLayerId, ...rest } = config;
+  if (layoutTemplateLayerId === undefined) return rest;
+
+  const layoutTemplate = layersById.get(layoutTemplateLayerId);
+  if (layoutTemplate === undefined) {
+    throw validationError('SERIALIZED_TEXT_TEMPLATE_MISSING', 'Serialized enhanced text layout template must appear before the text layer.', {
+      value: layoutTemplateLayerId,
+    });
+  }
+
+  return { ...rest, layoutTemplate };
+}
+
+function isLayerReference(template: Exclude<EnhancedTextLayerConfig['layoutTemplate'], undefined>): template is Layer {
+  return typeof template === 'object' && template !== null && 'scrawlEntity' in template;
 }
 
 function assertSerializedComposition(value: unknown): asserts value is SerializedComposition {

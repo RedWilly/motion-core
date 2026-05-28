@@ -1,4 +1,6 @@
 import type {
+  EnhancedTextLayerConfig,
+  Layer,
   LayerEntityFactory,
   LayerEntityFactoryContext,
   LayerType,
@@ -164,6 +166,54 @@ function resolvePaintStyle(style: unknown): unknown {
     : style;
 }
 
+function textFactory(scrawl: ScrawlFactoryModule): LayerEntityFactory {
+  return (context) => {
+    const config = context.config.enhancedText;
+    const enhanced = context.config.textMode === 'enhanced' || config !== undefined;
+    const base = {
+      ...baseEntityConfig(context),
+      text: context.config.text ?? '',
+      ...(enhanced && config !== undefined ? enhancedTextConfig(config) : null),
+    };
+
+    return enhanced ? scrawl.makeEnhancedLabel(base) : scrawl.makeLabel(base);
+  };
+}
+
+function enhancedTextConfig(config: EnhancedTextLayerConfig): Record<string, unknown> {
+  return {
+    ...(config.fontString === undefined ? null : { fontString: config.fontString }),
+    ...(config.fillStyle === undefined ? null : { fillStyle: resolvePaintStyle(config.fillStyle) }),
+    ...(config.strokeStyle === undefined ? null : { strokeStyle: resolvePaintStyle(config.strokeStyle) }),
+    ...(config.lineWidth === undefined ? null : { lineWidth: config.lineWidth }),
+    ...(config.method === undefined ? null : { method: config.method }),
+    ...(config.layoutTemplate === undefined ? null : { layoutTemplate: resolveLayoutTemplate(config.layoutTemplate) }),
+    ...(config.useLayoutTemplateAsPath === undefined ? null : { useLayoutTemplateAsPath: config.useLayoutTemplateAsPath }),
+    ...(config.pathPosition === undefined ? null : { pathPosition: config.pathPosition }),
+    ...(config.alignment === undefined ? null : { alignment: config.alignment }),
+    ...(config.lineSpacing === undefined ? null : { lineSpacing: config.lineSpacing }),
+    ...(config.lineAdjustment === undefined ? null : { lineAdjustment: config.lineAdjustment }),
+    ...(config.breakTextOnSpaces === undefined ? null : { breakTextOnSpaces: config.breakTextOnSpaces }),
+    ...(config.breakWordsOnHyphens === undefined ? null : { breakWordsOnHyphens: config.breakWordsOnHyphens }),
+    ...(config.justifyLine === undefined ? null : { justifyLine: config.justifyLine }),
+    ...(config.textUnitFlow === undefined ? null : { textUnitFlow: config.textUnitFlow }),
+    ...(config.startTextOnLine === undefined ? null : { startTextOnLine: config.startTextOnLine }),
+  };
+}
+
+function resolveLayoutTemplate(template: EnhancedTextLayerConfig['layoutTemplate']): unknown {
+  if (typeof template === 'string') return template;
+  if (template === undefined) return undefined;
+  if (isLayerReference(template)) {
+    return template.scrawlEntity.parts?.fill ?? template.scrawlEntity.parts?.stroke ?? template.scrawlEntity;
+  }
+  return template;
+}
+
+function isLayerReference(template: Exclude<EnhancedTextLayerConfig['layoutTemplate'], undefined>): template is Layer {
+  return typeof template === 'object' && template !== null && 'scrawlEntity' in template;
+}
+
 function initialShapeMethod(config: LayerEntityFactoryContext['config']['shape']): string {
   if (config?.stroke !== undefined || config?.strokeStyle !== undefined || config?.lineWidth !== undefined) {
     return 'fillThenDraw';
@@ -205,11 +255,7 @@ export function createScrawlEntityFactories(
     video: (context) => pictureFactory(scrawl, 'videoSource')(wrapContext(context)),
     svg: (context) => pictureFactory(scrawl, 'imageSource')(wrapContext(context)),
     shape: (context) => shapeFactory(scrawl)(wrapContext(context)),
-    text: (context) =>
-      (context.config.textMode === 'enhanced' ? scrawl.makeEnhancedLabel : scrawl.makeLabel)({
-          ...baseEntityConfig(wrapContext(context)),
-          text: context.config.text ?? '',
-        }),
+    text: (context) => textFactory(scrawl)(wrapContext(context)),
     particle: (context) => particleFactory(scrawl)(wrapContext(context)),
     precomp: (context) => scrawl.makePicture(baseEntityConfig(wrapContext(context))),
   };

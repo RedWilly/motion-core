@@ -1,4 +1,5 @@
 import { EntityMappingRegistry } from '../integration/entity-mapping';
+import { mapCompositionTimeToMediaTime, normalizeVideoLayerConfig } from '../integration/media-metadata';
 import { hydrateSerializedComposition, serializeComposition } from '../integration/serialization';
 import { syncLayerToScrawl } from '../integration/synchronization';
 import { capabilityError } from '../shared/errors';
@@ -13,6 +14,7 @@ import type {
   LayerMaskConfig,
   LayerMaskState,
   LayerConfig,
+  MediaSyncTarget,
   LayerType,
   MotionStateTarget,
   PrecompositionLayerConfig,
@@ -24,6 +26,7 @@ import type {
   ScrawlPatternConfig,
   ScrawlStyleState,
   ShapeLayerState,
+  TextLayerState,
   ScrawlTransformState,
   Transform,
 } from '../shared/types';
@@ -256,6 +259,83 @@ function createShapeState(layerConfig: LayerConfig, entity: { readonly parts?: L
   fill.apply = shape.apply;
   stroke.apply = shape.apply;
   return shape;
+}
+
+function createTextState(layerConfig: LayerConfig, entity: Layer['scrawlEntity']): TextLayerState | undefined {
+  if (layerConfig.textMode !== 'enhanced' && layerConfig.enhancedText === undefined) return undefined;
+
+  const config = layerConfig.enhancedText;
+  const text: TextLayerState = {
+    mode: 'enhanced',
+    values: {
+      alignment: config?.alignment ?? 0,
+      lineAdjustment: config?.lineAdjustment ?? 0,
+      lineSpacing: config?.lineSpacing ?? 1,
+      lineWidth: config?.lineWidth ?? 1,
+      pathPosition: config?.pathPosition ?? 0,
+      startTextOnLine: config?.startTextOnLine ?? 0,
+    },
+    apply() {},
+  };
+  const previousValues: TextLayerState['values'] = {
+    alignment: Number.NaN,
+    lineAdjustment: Number.NaN,
+    lineSpacing: Number.NaN,
+    lineWidth: Number.NaN,
+    pathPosition: Number.NaN,
+    startTextOnLine: Number.NaN,
+  };
+
+  text.apply = (): void => {
+    const updates: Partial<TextLayerState['values']> = {};
+    let changed = false;
+
+    for (const key of Object.keys(text.values) as Array<keyof TextLayerState['values']>) {
+      const value = text.values[key] ?? 0;
+      if (previousValues[key] === value) continue;
+
+      previousValues[key] = value;
+      updates[key] = value;
+      changed = true;
+    }
+
+    if (changed) entity.set(updates);
+  };
+
+  return text;
+}
+
+function createVideoMediaTarget(layerConfig: LayerConfig, entity: Layer['scrawlEntity'], name: string): MediaSyncTarget | undefined {
+  if (entity.get === undefined) return undefined;
+  const config = normalizeVideoLayerConfig(layerConfig.video);
+
+  return {
+    kind: 'video',
+    name,
+    getCurrentTime(): number {
+      const value = entity.get?.('video_currentTime');
+      if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+      return Math.max(0, (value - config.inPoint) / config.playbackRate);
+    },
+    seek(time: number): void {
+      const mediaTime = mapCompositionTimeToMediaTime(time, config);
+      entity.set({
+        video_playbackRate: config.playbackRate,
+        video_currentTime: mediaTime,
+      });
+      entity.videoFastSeek?.(mediaTime);
+    },
+    play(): void | Promise<void> {
+      this.seek(this.getCurrentTime());
+      entity.set({ video_playbackRate: config.playbackRate });
+      const result = entity.videoPlay?.();
+      if (result !== undefined) return result.then(() => undefined);
+      return undefined;
+    },
+    pause(): void {
+      entity.videoPause?.();
+    },
+  };
 }
 
 function clampUnit(value: number): number {
@@ -496,6 +576,8 @@ export function createComposition(
       const mask = normalizeScrawlMaskConfig(layerConfig.mask);
       const precomposition = layerConfig.precomp?.composition ?? null;
       const shape = createShapeState(layerConfig, entity);
+      const textState = type === 'text' ? createTextState(layerConfig, entity) : undefined;
+      const media = type === 'video' ? createVideoMediaTarget(layerConfig, entity, layerConfig.name ?? layerId) : undefined;
       const scrawlCell = layerConfig.precomp === undefined ? undefined : adapters.createPrecompositionCell?.({
         parent: runtime,
         composition: layerConfig.precomp.composition,
@@ -516,7 +598,9 @@ export function createComposition(
         effects,
         mask,
         precomposition,
+        ...(media === undefined ? null : { media }),
         ...(shape === undefined ? null : { shape }),
+        ...(textState === undefined ? null : { textState }),
         ...(scrawlCell === undefined ? null : { scrawlCell }),
         scrawlEntity: entity,
         scrawlState: createScrawlState(transform, opacity, visible),
@@ -539,6 +623,10 @@ export function createComposition(
         layer.shape.apply();
         registerMotionTarget(layer.shape.fill);
         registerMotionTarget(layer.shape.stroke);
+      }
+      if (layer.textState !== undefined) {
+        layer.textState.apply();
+        registerMotionTarget(layer.textState);
       }
       for (const effect of layer.effects) {
         attachLayerEffect(effectsController, layer, effect);
@@ -702,6 +790,7 @@ export function createComposition(
         removeMotionTarget(layer.shape.fill);
         removeMotionTarget(layer.shape.stroke);
       }
+      if (layer.textState !== undefined) removeMotionTarget(layer.textState);
       activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);
@@ -727,6 +816,7 @@ export function createComposition(
     },
 
     play(): void {
+      for (const layer of this.layers) void layer.media?.play?.();
       if (rendererDrivesPlayback) {
         livePlayback.startedAtMs = currentTimeMs() - this.timeline.time() * 1000;
         livePlayback.running = true;
@@ -737,6 +827,7 @@ export function createComposition(
     },
 
     pause(): void {
+      for (const layer of this.layers) layer.media?.pause?.();
       if (rendererDrivesPlayback) livePlayback.running = false;
       else this.timeline.pause();
       this.renderer.pause();
@@ -746,6 +837,7 @@ export function createComposition(
       livePlayback.running = false;
       this.timeline.seek(time);
       syncCompositionFrame(this.layers, time, precompositionTimes);
+      for (const layer of this.layers) void layer.media?.seek(time);
       applyMotionTargets();
       void this.renderer.renderFrame();
     },

@@ -104,6 +104,11 @@ describe('serialization', () => {
       parent,
       text: 'Hello',
       textMode: 'enhanced',
+      enhancedText: {
+        layoutTemplate: parent,
+        pathPosition: 0.25,
+        lineSpacing: 1.2,
+      },
       opacity: 0.5,
       effects: [{ id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] }],
       mask: { mode: 'clip', feather: 1 },
@@ -125,6 +130,11 @@ describe('serialization', () => {
     expect(hydrated.layers[1]?.parent).toBe(hydrated.layers[0]);
     expect(hydrated.layers[1]?.opacity).toBe(0.5);
     expect(hydrated.layers[1]?.config.text).toBe('Hello');
+    expect(hydrated.layers[1]?.config.enhancedText).toMatchObject({
+      layoutTemplate: hydrated.layers[0],
+      pathPosition: 0.25,
+      lineSpacing: 1.2,
+    });
     expect(hydrated.layers[1]?.effects[0]).toMatchObject({
       id: 'edge',
       actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],

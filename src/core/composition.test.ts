@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createAnimationController } from '../animation';
 import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 import { createComposition } from './composition';
 
@@ -182,6 +183,96 @@ describe('createComposition', () => {
       'remove:mask-feather-3',
     ]);
     expect(composition.layers).toEqual([]);
+  });
+
+  test('creates an enhanced text motion target backed by the Scrawl entity', () => {
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          text: (context) => ({
+            name: context.name,
+            type: 'EnhancedLabel',
+            set(values) {
+              setCalls.push({ ...values });
+              return this;
+            },
+          }),
+        },
+      },
+    );
+    const controller = createAnimationController(composition);
+    const layer = composition.addLayer('text', {
+      text: 'path text',
+      enhancedText: {
+        pathPosition: 0,
+        alignment: 0,
+        lineSpacing: 1,
+        lineAdjustment: 0,
+        lineWidth: 1,
+        startTextOnLine: 0,
+      },
+    });
+
+    expect(layer.textState?.values.pathPosition).toBe(0);
+    controller.animateTarget(layer.textState!, { pathPosition: 1, lineSpacing: 1.5 }, { duration: 1 });
+    composition.seek(0.5);
+
+    expect(layer.textState?.values.pathPosition).toBe(0.5);
+    expect(layer.textState?.values.lineSpacing).toBe(1.25);
+    expect(setCalls.at(-1)).toMatchObject({ pathPosition: 0.5, lineSpacing: 1.25 });
+  });
+
+  test('creates video media state from Scrawl Picture video controls', () => {
+    const events: string[] = [];
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 4 },
+      {
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get(key) {
+              events.push(`get:${key}`);
+              return currentTime;
+            },
+            set(values) {
+              events.push(`set:${values['video_currentTime'] ?? 'none'}:${values['video_playbackRate'] ?? 'none'}`);
+              if (typeof values['video_currentTime'] === 'number') currentTime = values['video_currentTime'];
+              return this;
+            },
+            videoFastSeek(time) {
+              events.push(`fastSeek:${time}`);
+              currentTime = time;
+            },
+            videoPlay() {
+              events.push('play');
+              return Promise.resolve();
+            },
+            videoPause() {
+              events.push('pause');
+            },
+          }),
+        },
+      },
+    );
+
+    const layer = composition.addLayer('video', 'clip.mp4', {
+      video: { inPoint: 2, playbackRate: 1.5 },
+    });
+
+    composition.seek(1);
+    composition.play();
+    composition.pause();
+
+    expect(layer.media?.kind).toBe('video');
+    expect(layer.media?.getCurrentTime()).toBeCloseTo(1);
+    expect(events).toContain('set:3.5:1.5');
+    expect(events).toContain('fastSeek:3.5');
+    expect(events).toContain('play');
+    expect(events).toContain('pause');
   });
 
   test('records layer-to-layer mask workflow without attaching unsafe entity clipping', () => {

@@ -1,13 +1,6 @@
-import type { Composition, Layer, ScrawlEntityAdapter, ScrawlTransformState } from '../shared/types';
+import type { Composition, Layer, MediaSyncTarget, ScrawlEntityAdapter, ScrawlTransformState } from '../shared/types';
 
-export interface MediaSyncTarget {
-  readonly kind: 'video' | 'audio';
-  readonly name: string;
-  getCurrentTime(): number;
-  seek(time: number): Promise<void>;
-  play?(): void | Promise<void>;
-  pause?(): void;
-}
+export type { MediaSyncTarget } from '../shared/types';
 
 export interface PreRenderHook {
   beforeRender(time: number): void | Promise<void>;
@@ -86,12 +79,12 @@ export async function syncToTimelineTime(
   composition.applyMotionTargets();
 
   for (const target of options.media ?? []) {
-    await target.seek(time);
-    const mediaTime = target.getCurrentTime();
-    const tolerance = 1 / options.frameRate;
-    if (Math.abs(mediaTime - time) > tolerance) {
-      options.onDesync?.({ target, timelineTime: time, mediaTime });
-    }
+    await seekMediaTarget(target, time, options.frameRate, options.onDesync);
+  }
+
+  for (const layer of composition.layers) {
+    const target = layer.media;
+    if (target !== undefined) await seekMediaTarget(target, time, options.frameRate, options.onDesync);
   }
 
   for (const hook of options.hooks ?? []) {
@@ -174,19 +167,34 @@ export class TimelineSynchronizer {
     const tolerance = 1 / this.frameRate;
 
     for (const target of this.media) {
-      const beforeSeekTime = target.getCurrentTime();
-      if (Math.abs(beforeSeekTime - time) <= tolerance) continue;
+      await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
+    }
 
-      await target.seek(time);
-      const mediaTime = target.getCurrentTime();
-      if (Math.abs(mediaTime - time) > tolerance) {
-        this.onDesync?.({ target, timelineTime: time, mediaTime });
-      }
+    for (const layer of this.composition.layers) {
+      const target = layer.media;
+      if (target !== undefined) await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
     }
   }
 
   private async runHooks(time: number): Promise<void> {
     for (const hook of this.hooks) await hook.beforeRender(time);
+  }
+}
+
+async function seekMediaTarget(
+  target: MediaSyncTarget,
+  time: number,
+  frameRate: number,
+  onDesync: SynchronizationOptions['onDesync'],
+  tolerance = 1 / frameRate,
+): Promise<void> {
+  const beforeSeekTime = target.getCurrentTime();
+  if (Math.abs(beforeSeekTime - time) <= tolerance) return;
+
+  await target.seek(time);
+  const mediaTime = target.getCurrentTime();
+  if (Math.abs(mediaTime - time) > tolerance) {
+    onDesync?.({ target, timelineTime: time, mediaTime });
   }
 }
 

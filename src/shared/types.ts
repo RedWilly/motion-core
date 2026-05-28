@@ -47,6 +47,7 @@ export interface LayerConfig {
   scrawl?: Readonly<Record<string, unknown>>;
   textMode?: 'label' | 'enhanced';
   text?: string;
+  enhancedText?: EnhancedTextLayerConfig;
   variant?: 'emitter' | 'net' | 'tracer';
   effects?: readonly ScrawlEffectConfig[];
   mask?: LayerMaskConfig;
@@ -82,6 +83,29 @@ export interface ShapeStrokeConfig {
 
 export type ShapePaintStyle = string | ScrawlStyleState;
 
+export type EnhancedTextJustifyLine = 'start' | 'end' | 'center' | 'space-between' | 'space-around';
+
+export type EnhancedTextUnitFlow = 'row' | 'row-reverse' | 'column' | 'column-reverse';
+
+export interface EnhancedTextLayerConfig {
+  readonly fontString?: string;
+  readonly fillStyle?: ShapePaintStyle;
+  readonly strokeStyle?: ShapePaintStyle;
+  readonly lineWidth?: number;
+  readonly method?: string;
+  readonly layoutTemplate?: string | Layer | ScrawlEntityAdapter;
+  readonly useLayoutTemplateAsPath?: boolean;
+  readonly pathPosition?: number;
+  readonly alignment?: number;
+  readonly lineSpacing?: number;
+  readonly lineAdjustment?: number;
+  readonly breakTextOnSpaces?: boolean;
+  readonly breakWordsOnHyphens?: boolean;
+  readonly justifyLine?: EnhancedTextJustifyLine;
+  readonly textUnitFlow?: EnhancedTextUnitFlow;
+  readonly startTextOnLine?: number;
+}
+
 export interface MediaLayerConfig {
   inPoint?: number;
   outPoint?: number;
@@ -113,7 +137,9 @@ export interface Layer {
   effects: LayerEffectState[];
   mask: LayerMaskState | null;
   precomposition: Composition | null;
+  media?: MediaSyncTarget;
   shape?: ShapeLayerState;
+  textState?: TextLayerState;
   scrawlCell?: ScrawlCellAdapter;
   scrawlEntity: ScrawlEntityAdapter;
   scrawlState: ScrawlTransformState;
@@ -236,6 +262,19 @@ export interface ShapeLayerState {
   apply(): void;
 }
 
+export interface TextLayerMotionValues extends Record<string, number> {
+  alignment: number;
+  lineAdjustment: number;
+  lineSpacing: number;
+  lineWidth: number;
+  pathPosition: number;
+  startTextOnLine: number;
+}
+
+export interface TextLayerState extends MotionStateTarget<TextLayerMotionValues> {
+  readonly mode: 'enhanced';
+}
+
 export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'>, MotionStateTarget {
   readonly id: string;
   scrawlFilter?: ScrawlFilterAdapter;
@@ -324,6 +363,15 @@ export interface ScrawlTransformState {
   [key: string]: unknown;
 }
 
+export interface MediaSyncTarget {
+  readonly kind: 'video' | 'audio';
+  readonly name: string;
+  getCurrentTime(): number;
+  seek(time: number): void | Promise<void>;
+  play?(): void | Promise<void>;
+  pause?(): void;
+}
+
 export interface Composition {
   id: string;
   name: string;
@@ -367,11 +415,15 @@ export interface ScrawlEntityAdapter {
     readonly fill?: ScrawlEntityAdapter;
     readonly stroke?: ScrawlEntityAdapter;
   };
+  get?(key: string): unknown;
   set(values: Readonly<Record<string, unknown>> | Readonly<ScrawlTransformState>): unknown;
   addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
   removeFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
   clearFilters?(): unknown;
   kill?(): unknown;
+  videoFastSeek?(time: number): unknown;
+  videoPause?(): unknown;
+  videoPlay?(): Promise<unknown>;
   saveAsPacket?(options?: unknown): string;
 }
 
@@ -543,8 +595,15 @@ export interface SerializedComposition {
 
 export type SerializedLayerConfig = Omit<
   LayerConfig,
-  'content' | 'locked' | 'name' | 'opacity' | 'parent' | 'precomp' | 'transform' | 'visible'
->;
+  'content' | 'enhancedText' | 'locked' | 'name' | 'opacity' | 'parent' | 'precomp' | 'transform' | 'visible'
+> & {
+  enhancedText?: SerializedEnhancedTextLayerConfig;
+};
+
+export type SerializedEnhancedTextLayerConfig = Omit<EnhancedTextLayerConfig, 'layoutTemplate'> & {
+  readonly layoutTemplate?: string;
+  readonly layoutTemplateLayerId?: string;
+};
 
 export interface SerializedAsset {
   id: string;
