@@ -78,8 +78,43 @@ describe('AnimationController', () => {
   });
 
   test('animates shape fill and stroke state without replacing the Scrawl entity', () => {
-    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
-    const composition = createComposition({ width: 100, height: 100, duration: 4 });
+    const fillCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const strokeCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 4 },
+      {
+        entityFactories: {
+          shape: (context) => {
+            const fill = {
+              name: `${context.name}-fill`,
+              type: 'Wheel',
+              set(values: Readonly<Record<string, unknown>>) {
+                fillCalls.push({ ...values });
+                return this;
+              },
+            };
+            const stroke = {
+              name: `${context.name}-stroke`,
+              type: 'Wheel',
+              set(values: Readonly<Record<string, unknown>>) {
+                strokeCalls.push({ ...values });
+                return this;
+              },
+            };
+            return {
+              name: context.name,
+              type: 'CompositeShape',
+              parts: { fill, stroke },
+              set(values: Readonly<Record<string, unknown>>) {
+                fill.set(values);
+                stroke.set(values);
+                return this;
+              },
+            };
+          },
+        },
+      },
+    );
     const layer = composition.addLayer('shape', {
       shape: {
         kind: 'wheel',
@@ -88,10 +123,6 @@ describe('AnimationController', () => {
         stroke: { color: '#ffffff', opacity: 1, width: 2 },
       },
     });
-    layer.scrawlEntity.set = (values) => {
-      setCalls.push({ ...values });
-      return layer.scrawlEntity;
-    };
     const controller = createAnimationController(composition);
 
     controller.animateTarget(layer.shape!.fill, { opacity: 1 }, { duration: 2, easing: 'none' });
@@ -100,11 +131,14 @@ describe('AnimationController', () => {
 
     expect(layer.shape?.fill.values.opacity).toBe(0.5);
     expect(layer.shape?.stroke.values.width).toBe(5);
-    expect(setCalls.at(-1)).toMatchObject({
-      fillStyle: 'rgb(249 115 22 / 0.5)',
-      strokeStyle: 'rgb(255 255 255 / 1)',
+    expect(fillCalls.at(-1)).toMatchObject({
+      globalAlpha: 0.5,
+      visibility: true,
+    });
+    expect(strokeCalls.at(-1)).toMatchObject({
+      globalAlpha: 1,
       lineWidth: 5,
-      method: 'fillThenDraw',
+      visibility: true,
     });
   });
 

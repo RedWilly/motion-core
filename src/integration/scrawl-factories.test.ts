@@ -14,8 +14,10 @@ function createEntity(type: string, name: string): ScrawlEntityAdapter {
 
 function createFactoryRecorder() {
   const calls: string[] = [];
+  const itemCalls: Array<Record<string, unknown>> = [];
   const factory = (type: string) => (items: Record<string, unknown>) => {
     calls.push(type);
+    itemCalls.push({ ...items });
     return createEntity(type, String(items['name']));
   };
   const scrawl: ScrawlFactoryModule = {
@@ -34,7 +36,7 @@ function createFactoryRecorder() {
     makeWheel: factory('Wheel'),
   };
 
-  return { calls, scrawl };
+  return { calls, items: itemCalls, scrawl };
 }
 
 describe('createScrawlEntityFactories', () => {
@@ -60,5 +62,36 @@ describe('createScrawlEntityFactories', () => {
 
     expect(calls).toEqual(['Wheel', 'Rectangle', 'Shape', 'EnhancedLabel', 'Net', 'Tracer', 'Picture']);
     expect(image?.name).toBe('ns-image');
+  });
+
+  test('creates separate Scrawl entity parts for typed shape fill and stroke', () => {
+    const { calls, items, scrawl } = createFactoryRecorder();
+    const factories = createScrawlEntityFactories(scrawl, { namespace: 'ns' });
+    const style = {
+      id: 'gradient',
+      style: { name: 'gradient-style' },
+      values: {},
+      apply() {},
+    };
+
+    const entity = factories.shape?.({
+      id: 'shape-1',
+      type: 'shape',
+      name: 'orb',
+      config: {
+        shape: {
+          kind: 'wheel',
+          fill: { style, opacity: 0 },
+          stroke: { color: '#ffffff', opacity: 1, width: 2 },
+        },
+      },
+    });
+
+    expect(entity?.type).toBe('CompositeShape');
+    expect(entity?.parts?.fill?.name).toBe('ns-orb-fill');
+    expect(entity?.parts?.stroke?.name).toBe('ns-orb-stroke');
+    expect(calls).toEqual(['Wheel', 'Wheel']);
+    expect(items[0]?.['fillStyle']).toBe(style.style);
+    expect(items[1]?.['strokeStyle']).toBe('#ffffff');
   });
 });

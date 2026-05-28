@@ -11,6 +11,7 @@ import {
   type ScrawlFactoryModule,
 } from './scrawl-factories';
 import { createScrawlEffectsController } from './effects';
+import { createScrawlStylesController } from './styles';
 
 type CanvasFit = 'none' | 'contain' | 'cover' | 'fill';
 
@@ -221,6 +222,9 @@ export function createBrowserScrawlAdapter(
     },
     createEffectsController() {
       return createScrawlEffectsController(scrawl, { namespace });
+    },
+    createStylesController() {
+      return createScrawlStylesController(scrawl, { namespace });
     },
     createRenderer(composition: CompositionRuntime): RenderAdapter {
       const render = scrawl.makeRender({

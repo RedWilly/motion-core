@@ -34,8 +34,8 @@ async function main() {
     adapters,
   );
 
-  const stage = composition.addLayer('shape', {
-    name: 'stage',
+	  const stage = composition.addLayer('shape', {
+	    name: 'stage',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 360, y: 190 } },
     shape: {
       kind: 'rectangle',
@@ -45,6 +45,21 @@ async function main() {
       fillStyle: '#324263',
       strokeStyle: '#334155',
     },
+	  });
+
+  const orbGradient = composition.createGradient({
+    id: 'orb-gradient',
+    colors: [
+      [0, '#f97316'],
+      [520, '#facc15'],
+      [999, '#fb7185'],
+    ],
+    startX: -60,
+    startY: 0,
+    endX: 60,
+    endY: 0,
+    paletteStart: 0,
+    paletteEnd: 999,
   });
 
   const orb = composition.addLayer('shape', {
@@ -53,7 +68,7 @@ async function main() {
     shape: {
       kind: 'wheel',
       radius: 54,
-      fill: { color: '#f97316', opacity: 0 },
+      fill: { style: orbGradient, opacity: 0 },
       stroke: { color: '#ffffff', opacity: 1, width: 3 },
     },
     effects: [
@@ -76,6 +91,15 @@ async function main() {
   const blur = orb.effects[0];
   const fill = orb.shape?.fill;
   const stroke = orb.shape?.stroke;
+  controller.animateTarget(orbGradient, {
+    paletteStart: 180,
+    paletteEnd: 819,
+  }, {
+    duration: 1.6,
+    easing: 'power1.inOut',
+    repeat: -1,
+    yoyo: true,
+  });
   controller.animate(orb, {
     'position.x': 700,
     rotation: 360,

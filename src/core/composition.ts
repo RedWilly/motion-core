@@ -1,6 +1,7 @@
 import { EntityMappingRegistry } from '../integration/entity-mapping';
 import { hydrateSerializedComposition, serializeComposition } from '../integration/serialization';
 import { syncLayerToScrawl } from '../integration/synchronization';
+import { capabilityError } from '../shared/errors';
 import { createId } from '../shared/ids';
 import type {
   Composition,
@@ -19,6 +20,9 @@ import type {
   ScrawlEffectConfig,
   ScrawlEffectsAdapter,
   ScrawlGroupAdapter,
+  ScrawlGradientConfig,
+  ScrawlPatternConfig,
+  ScrawlStyleState,
   ShapeLayerState,
   ScrawlTransformState,
   Transform,
@@ -97,6 +101,16 @@ function containsPrecomposition(root: Composition, search: Composition, seen = n
   return false;
 }
 
+function layerArtefacts(layer: Layer): ScrawlGroupArtefact[] {
+  const fill = layer.scrawlEntity.parts?.fill;
+  const stroke = layer.scrawlEntity.parts?.stroke;
+  return fill === undefined && stroke === undefined
+    ? [layer.scrawlEntity]
+    : [fill, stroke].filter((entity): entity is ScrawlGroupArtefact => entity !== undefined);
+}
+
+type ScrawlGroupArtefact = Layer['scrawlEntity'];
+
 function syncPrecompositionLayer(
   layer: Layer,
   parentTime: number,
@@ -119,13 +133,14 @@ function moveLayersIntoGroup(
   previousGroup: ScrawlGroupAdapter | undefined,
 ): void {
   for (const layer of layers) {
+    const artefacts = layerArtefacts(layer);
     if (targetGroup.moveArtefactsIntoGroup !== undefined) {
-      targetGroup.moveArtefactsIntoGroup(layer.scrawlEntity);
+      targetGroup.moveArtefactsIntoGroup(...artefacts);
       continue;
     }
 
-    previousGroup?.removeArtefacts?.(layer.scrawlEntity);
-    targetGroup.addArtefacts?.(layer.scrawlEntity);
+    previousGroup?.removeArtefacts?.(...artefacts);
+    targetGroup.addArtefacts?.(...artefacts);
   }
 }
 
@@ -180,10 +195,20 @@ function configureLayerEffectMotionTarget(
   };
 }
 
-function createShapeState(layerConfig: LayerConfig, entity: { set(values: Readonly<Record<string, unknown>>): unknown }): ShapeLayerState | undefined {
+function createShapeState(layerConfig: LayerConfig, entity: { readonly parts?: Layer['scrawlEntity']['parts']; set(values: Readonly<Record<string, unknown>>): unknown }): ShapeLayerState | undefined {
   const config = layerConfig.shape;
   if (config === undefined) return undefined;
+  if (config.fill === undefined && config.stroke === undefined) return undefined;
 
+  const fillEntity = entity.parts?.fill;
+  const strokeEntity = entity.parts?.stroke;
+  if (fillEntity === undefined || strokeEntity === undefined) {
+    throw capabilityError(
+      'SHAPE_PARTS_UNAVAILABLE',
+      'Typed shape fill/stroke animation requires separate Scrawl entity parts.',
+      'Create shape layers through the Scrawl adapter or provide an entity factory that returns fill and stroke parts.',
+    );
+  }
   const fillColor = config.fill?.color ?? config.fillStyle ?? 'rgb(0 0 0 / 1)';
   const strokeColor = config.stroke?.color ?? config.strokeStyle ?? 'rgb(0 0 0 / 1)';
   const fill = {
@@ -212,23 +237,19 @@ function createShapeState(layerConfig: LayerConfig, entity: { set(values: Readon
       const fillOpacity = clampUnit(fill.values.opacity);
       const strokeOpacity = clampUnit(stroke.values.opacity);
       const strokeWidth = Math.max(stroke.values.width, 0);
-      if (
-        previousFillOpacity === fillOpacity &&
-        previousStrokeOpacity === strokeOpacity &&
-        previousStrokeWidth === strokeWidth
-      ) {
-        return;
+      if (previousFillOpacity !== fillOpacity) {
+        previousFillOpacity = fillOpacity;
+        fillEntity.set({ globalAlpha: fillOpacity, visibility: fillOpacity > 0 });
       }
-
-      previousFillOpacity = fillOpacity;
-      previousStrokeOpacity = strokeOpacity;
-      previousStrokeWidth = strokeWidth;
-      entity.set({
-        fillStyle: colorWithOpacity(fill.color, fillOpacity),
-        strokeStyle: colorWithOpacity(stroke.color, strokeOpacity),
-        lineWidth: strokeWidth,
-        method: shapeMethod(fillOpacity, strokeOpacity, strokeWidth),
-      });
+      if (previousStrokeOpacity !== strokeOpacity || previousStrokeWidth !== strokeWidth) {
+        previousStrokeOpacity = strokeOpacity;
+        previousStrokeWidth = strokeWidth;
+        strokeEntity.set({
+          globalAlpha: strokeOpacity,
+          lineWidth: strokeWidth,
+          visibility: strokeOpacity > 0 && strokeWidth > 0,
+        });
+      }
     },
   };
 
@@ -240,64 +261,6 @@ function createShapeState(layerConfig: LayerConfig, entity: { set(values: Readon
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(Math.max(value, 0), 1);
-}
-
-function shapeMethod(fillOpacity: number, strokeOpacity: number, strokeWidth: number): string {
-  const fillVisible = fillOpacity > 0;
-  const strokeVisible = strokeOpacity > 0 && strokeWidth > 0;
-  if (fillVisible && strokeVisible) return 'fillThenDraw';
-  if (strokeVisible) return 'draw';
-  return 'fill';
-}
-
-function colorWithOpacity(color: string, opacity: number): string {
-  const alpha = clampUnit(opacity);
-  const hex = parseHexColor(color);
-  if (hex !== null) return `rgb(${hex.red} ${hex.green} ${hex.blue} / ${alpha})`;
-  const rgb = parseRgbColor(color);
-  if (rgb !== null) return `rgb(${rgb.red} ${rgb.green} ${rgb.blue} / ${alpha})`;
-  return alpha >= 1 ? color : color;
-}
-
-function parseHexColor(color: string): { red: number; green: number; blue: number } | null {
-  const value = color.trim();
-  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
-    return {
-      red: Number.parseInt(`${value[1]}${value[1]}`, 16),
-      green: Number.parseInt(`${value[2]}${value[2]}`, 16),
-      blue: Number.parseInt(`${value[3]}${value[3]}`, 16),
-    };
-  }
-  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
-    return {
-      red: Number.parseInt(value.slice(1, 3), 16),
-      green: Number.parseInt(value.slice(3, 5), 16),
-      blue: Number.parseInt(value.slice(5, 7), 16),
-    };
-  }
-  return null;
-}
-
-function parseRgbColor(color: string): { red: number; green: number; blue: number } | null {
-  const match = color.trim().match(/^rgba?\((.+)\)$/i);
-  if (match === null) return null;
-  const parts = match[1]!
-    .replaceAll(',', ' ')
-    .replace('/', ' ')
-    .split(/\s+/)
-    .filter((part) => part.length > 0);
-  if (parts.length < 3) return null;
-  const red = parseCssColorChannel(parts[0]!);
-  const green = parseCssColorChannel(parts[1]!);
-  const blue = parseCssColorChannel(parts[2]!);
-  if (red === null || green === null || blue === null) return null;
-  return { red, green, blue };
-}
-
-function parseCssColorChannel(value: string): number | null {
-  const channel = value.endsWith('%') ? (Number.parseFloat(value) / 100) * 255 : Number.parseFloat(value);
-  if (!Number.isFinite(channel)) return null;
-  return Math.min(Math.max(Math.round(channel), 0), 255);
 }
 
 function writeEffectActionValue(effect: LayerEffectState, key: string, value: number): void {
@@ -464,6 +427,7 @@ export function createComposition(
   if (activeGroup !== undefined) runtime.group = activeGroup;
   const renderer: RenderAdapter = adapters.createRenderer?.(runtime) ?? new NoopRenderer(runtime);
   const rendererDrivesPlayback = renderer.setFrameCallback !== undefined;
+  const stylesController = adapters.createStylesController?.();
   const motionTargets: MotionStateTarget[] = [];
   const livePlayback = {
     running: false,
@@ -569,7 +533,7 @@ export function createComposition(
       parent?.children.push(layer);
       this.layers.push(layer);
       registry.register(layer, entity);
-      activeGroup?.addArtefacts?.(entity);
+      activeGroup?.addArtefacts?.(...layerArtefacts(layer));
       syncLayerToScrawl(layer);
       if (layer.shape !== undefined) {
         layer.shape.apply();
@@ -648,6 +612,39 @@ export function createComposition(
       layer.effects.length = 0;
     },
 
+    createGradient(config: ScrawlGradientConfig): ScrawlStyleState {
+      if (stylesController === undefined) {
+        throw capabilityError(
+          'SCRAWL_STYLES_UNAVAILABLE',
+          'Composition does not have a Scrawl styles controller.',
+          'Create the composition with the browser Scrawl-canvas adapter before creating Scrawl styles.',
+        );
+      }
+
+      const style = stylesController.createGradient(config);
+      registerMotionTarget(style);
+      return style;
+    },
+
+    createPattern(config: ScrawlPatternConfig): ScrawlStyleState {
+      if (stylesController === undefined) {
+        throw capabilityError(
+          'SCRAWL_STYLES_UNAVAILABLE',
+          'Composition does not have a Scrawl styles controller.',
+          'Create the composition with the browser Scrawl-canvas adapter before creating Scrawl styles.',
+        );
+      }
+
+      const style = stylesController.createPattern(config);
+      registerMotionTarget(style);
+      return style;
+    },
+
+    removeStyle(style: ScrawlStyleState): void {
+      removeMotionTarget(style);
+      stylesController?.removeStyle(style);
+    },
+
     registerMotionTarget,
 
     applyMotionTargets,
@@ -705,7 +702,7 @@ export function createComposition(
         removeMotionTarget(layer.shape.fill);
         removeMotionTarget(layer.shape.stroke);
       }
-      activeGroup?.removeArtefacts?.(layer.scrawlEntity);
+      activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
       layer.scrawlEntity.kill?.();
       precompositionTimes.delete(layer);
       registry.unregister(layer);

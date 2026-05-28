@@ -69,14 +69,18 @@ export interface ShapeLayerConfig {
 
 export interface ShapeFillConfig {
   readonly color?: string;
+  readonly style?: ShapePaintStyle;
   readonly opacity?: number;
 }
 
 export interface ShapeStrokeConfig {
   readonly color?: string;
+  readonly style?: ShapePaintStyle;
   readonly opacity?: number;
   readonly width?: number;
 }
+
+export type ShapePaintStyle = string | ScrawlStyleState;
 
 export interface MediaLayerConfig {
   inPoint?: number;
@@ -253,6 +257,52 @@ export interface ScrawlEffectHandle {
   readonly filter: ScrawlFilterAdapter;
 }
 
+export type ScrawlGradientKind = 'linear' | 'radial' | 'conic';
+
+export type ScrawlGradientColorStop = readonly [number, string];
+
+export interface ScrawlGradientConfig {
+  readonly id?: string;
+  readonly kind?: ScrawlGradientKind;
+  readonly colors: readonly ScrawlGradientColorStop[];
+  readonly startX?: number | string;
+  readonly startY?: number | string;
+  readonly endX?: number | string;
+  readonly endY?: number | string;
+  readonly startRadius?: number | string;
+  readonly endRadius?: number | string;
+  readonly startAngle?: number;
+  readonly angleRange?: number;
+  readonly paletteStart?: number;
+  readonly paletteEnd?: number;
+  readonly cyclePalette?: boolean;
+  readonly [key: string]: unknown;
+}
+
+export interface ScrawlPatternConfig {
+  readonly id?: string;
+  readonly asset?: string;
+  readonly imageSource?: string;
+  readonly videoSource?: string;
+  readonly repeat?: string;
+  readonly removeAssetOnKill?: boolean | string;
+  readonly [key: string]: unknown;
+}
+
+export interface ScrawlStyleAdapter {
+  readonly name: string;
+  readonly type?: string;
+  set?(values: Readonly<Record<string, unknown>>): unknown;
+  kill?(): unknown;
+  saveAsPacket?(options?: unknown): string;
+}
+
+export interface ScrawlStyleState<TValues extends Record<string, number> = Record<string, number>>
+  extends MotionStateTarget<TValues> {
+  readonly id: string;
+  readonly style: ScrawlStyleAdapter;
+}
+
 export interface ScrawlTransformState {
   startX: number;
   startY: number;
@@ -294,6 +344,9 @@ export interface Composition {
   addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
   removeEffect(layer: Layer, effect: LayerEffectState | string): void;
   clearEffects(layer: Layer): void;
+  createGradient(config: ScrawlGradientConfig): ScrawlStyleState;
+  createPattern(config: ScrawlPatternConfig): ScrawlStyleState;
+  removeStyle(style: ScrawlStyleState): void;
   registerMotionTarget(target: MotionStateTarget): () => void;
   applyMotionTargets(): void;
   setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
@@ -310,6 +363,10 @@ export interface Composition {
 export interface ScrawlEntityAdapter {
   readonly name: string;
   readonly type: string;
+  readonly parts?: {
+    readonly fill?: ScrawlEntityAdapter;
+    readonly stroke?: ScrawlEntityAdapter;
+  };
   set(values: Readonly<Record<string, unknown>> | Readonly<ScrawlTransformState>): unknown;
   addFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
   removeFilters?(...filters: Array<ScrawlFilterAdapter | string>): unknown;
@@ -360,6 +417,13 @@ export interface ScrawlEffectsAdapter {
   removeEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, effect: ScrawlEffectHandle): void;
   clearEffects(target: ScrawlEntityAdapter | ScrawlGroupAdapter): void;
   applyMask(target: ScrawlEntityAdapter, config?: ScrawlMaskConfig): ScrawlEffectHandle | undefined;
+}
+
+export interface ScrawlStylesAdapter {
+  createGradient(config: ScrawlGradientConfig): ScrawlStyleState;
+  createPattern(config: ScrawlPatternConfig): ScrawlStyleState;
+  updateStyle(style: ScrawlStyleState, values: Readonly<Record<string, unknown>>): void;
+  removeStyle(style: ScrawlStyleState): void;
 }
 
 export interface RenderAdapter {
@@ -415,6 +479,7 @@ export interface EngineAdapters {
   createPrecompositionCell?: (context: PrecompositionCellFactoryContext) => ScrawlCellAdapter | undefined;
   createLayerMaskCell?: (context: LayerMaskCellFactoryContext) => ScrawlCellAdapter | undefined;
   createEffectsController?: () => ScrawlEffectsAdapter | undefined;
+  createStylesController?: () => ScrawlStylesAdapter | undefined;
   entityFactories?: Partial<Record<LayerType, LayerEntityFactory>>;
   importScrawlPacket?: (packet: string) => unknown;
 }
