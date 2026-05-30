@@ -1,5 +1,6 @@
 import { capabilityError, validationError } from '../shared/errors';
-import type { Composition, FrameCaptureOptions } from '../shared/types';
+import type { Composition } from '../shared/project';
+import type { FrameCaptureOptions } from '../shared/runtime';
 import { syncToTimelineTime } from '../integration/synchronization';
 
 export type FrameExportFormat = 'png' | 'jpg' | 'jpeg' | 'webp';

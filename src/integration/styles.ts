@@ -6,7 +6,7 @@ import type {
   ScrawlStyleAdapter,
   ScrawlStylesAdapter,
   ScrawlStyleState,
-} from '../shared/types';
+} from '../shared/scrawl';
 
 interface ScrawlStyleFactoryModule {
   makeConicGradient?: (items: Record<string, unknown>) => ScrawlStyleAdapter;
@@ -23,7 +23,7 @@ export type {
   ScrawlStyleAdapter,
   ScrawlStylesAdapter,
   ScrawlStyleState,
-} from '../shared/types';
+} from '../shared/scrawl';
 
 export interface ScrawlStylesOptions {
   readonly namespace?: string;

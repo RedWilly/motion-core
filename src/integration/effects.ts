@@ -7,7 +7,7 @@ import type {
   ScrawlFilterAdapter,
   ScrawlGroupAdapter,
   ScrawlMaskConfig,
-} from '../shared/types';
+} from '../shared/scrawl';
 import { normalizeScrawlEffectConfig, normalizeScrawlMaskConfig } from '../shared/validation';
 import type { ScrawlFactoryModule } from './scrawl-factories';
 
@@ -20,9 +20,9 @@ export type {
   ScrawlFilterLine,
   ScrawlMaskConfig,
   ScrawlMaskMode,
-} from '../shared/types';
+} from '../shared/scrawl';
 
-export type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
+export type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/scrawl';
 
 export interface ScrawlEffectsOptions {
   readonly namespace?: string;

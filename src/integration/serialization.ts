@@ -3,17 +3,19 @@ import type {
   Composition,
   CompositionAsset,
   CompositionConfig,
-  EngineAdapters,
   Layer,
   LayerConfig,
-  SerializedAsset,
-  SerializedComposition,
-  SerializedLayerConfig,
-  ScrawlEffectConfig,
   LayerMaskConfig,
   EnhancedTextLayerConfig,
+} from '../shared/project';
+import type { EngineAdapters } from '../shared/runtime';
+import type { ScrawlEffectConfig } from '../shared/scrawl';
+import type {
+  SerializedAsset,
+  SerializedComposition,
   SerializedEnhancedTextLayerConfig,
-} from '../shared/types';
+  SerializedLayerConfig,
+} from '../shared/serialization-types';
 
 type SerializedLayer = SerializedComposition['layers'][number];
 

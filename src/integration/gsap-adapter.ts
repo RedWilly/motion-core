@@ -1,4 +1,4 @@
-import type { TimelineAdapter, TimelineTweenAdapter } from '../shared/types';
+import type { TimelineAdapter, TimelineTweenAdapter } from '../shared/runtime';
 
 export interface GsapModule {
   timeline(vars?: Record<string, unknown>): GsapTimelineLike;

@@ -1,5 +1,6 @@
 import { EngineError, validationError } from '../shared/errors';
-import type { Composition, Layer, MotionStateTarget, TimelineTweenAdapter } from '../shared/types';
+import type { Composition, Layer } from '../shared/project';
+import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime';
 import { createId } from '../shared/ids';
 import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 

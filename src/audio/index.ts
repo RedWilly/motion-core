@@ -1,5 +1,7 @@
-import type { AudioLayerConfig, Layer, MediaSyncTarget } from '../shared/types';
+import type { AudioLayerConfig, Layer } from '../shared/project';
+import type { MediaSyncTarget } from '../shared/runtime';
 import { capabilityError, validationError } from '../shared/errors';
+import { assertNonNegativeNumber, assertPositiveNumber, assertUnitRange } from '../shared/validation';
 
 export type AudioFftSize = 512 | 1024 | 2048 | 4096;
 
@@ -440,12 +442,12 @@ function normalizeAudioPlaybackConfig(config: AudioLayerBridgeConfig): AudioPlay
     fadeOut: config.fadeOut ?? 0,
   };
 
-  assertNonNegative(playback.inPoint, 'inPoint');
-  if (playback.outPoint !== null) assertNonNegative(playback.outPoint, 'outPoint');
-  assertPositive(playback.playbackRate, 'playbackRate');
+  assertNonNegativeNumber(playback.inPoint, 'inPoint');
+  if (playback.outPoint !== null) assertNonNegativeNumber(playback.outPoint, 'outPoint');
+  assertPositiveNumber(playback.playbackRate, 'playbackRate');
   assertUnitRange(playback.volume, 'volume');
-  assertNonNegative(playback.fadeIn, 'fadeIn');
-  assertNonNegative(playback.fadeOut, 'fadeOut');
+  assertNonNegativeNumber(playback.fadeIn, 'fadeIn');
+  assertNonNegativeNumber(playback.fadeOut, 'fadeOut');
 
   if (playback.outPoint !== null && playback.outPoint <= playback.inPoint) {
     throw validationError(
@@ -462,7 +464,7 @@ function mapCompositionTimeToSourceTime(
   compositionTime: number,
   config: AudioPlaybackConfig,
 ): number | null {
-  assertNonNegative(compositionTime, 'compositionTime');
+  assertNonNegativeNumber(compositionTime, 'compositionTime');
   const mediaTime = config.inPoint + compositionTime * config.playbackRate;
   if (config.outPoint !== null && mediaTime >= config.outPoint) return null;
   return mediaTime;
@@ -483,34 +485,4 @@ function computeAudioGain(
 
 async function loadMediabunnyAudioRuntime(): Promise<MediabunnyAudioRuntime> {
   return import('mediabunny') as unknown as Promise<MediabunnyAudioRuntime>;
-}
-
-function assertNonNegative(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0) {
-    throw validationError(
-      'INVALID_NON_NEGATIVE_NUMBER',
-      `${propertyName} must be a non-negative number.`,
-      { propertyName, value },
-    );
-  }
-}
-
-function assertPositive(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw validationError(
-      'INVALID_POSITIVE_NUMBER',
-      `${propertyName} must be a positive number.`,
-      { propertyName, value },
-    );
-  }
-}
-
-function assertUnitRange(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0 || value > 1) {
-    throw validationError(
-      'INVALID_UNIT_RANGE',
-      `${propertyName} must be between 0 and 1.`,
-      { propertyName, value },
-    );
-  }
 }

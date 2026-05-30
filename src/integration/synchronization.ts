@@ -1,6 +1,8 @@
-import type { Composition, Layer, MediaSyncTarget, ScrawlEntityAdapter, ScrawlTransformState } from '../shared/types';
+import type { Composition, Layer } from '../shared/project';
+import type { MediaSyncTarget } from '../shared/runtime';
+import type { ScrawlEntityAdapter, ScrawlTransformState } from '../shared/scrawl';
 
-export type { MediaSyncTarget } from '../shared/types';
+export type { MediaSyncTarget } from '../shared/runtime';
 
 export interface PreRenderHook {
   beforeRender(time: number): void | Promise<void>;

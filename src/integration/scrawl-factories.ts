@@ -1,14 +1,16 @@
 import type {
   EnhancedTextLayerConfig,
   Layer,
+  LayerType,
+} from '../shared/project';
+import type {
   LayerEntityFactory,
   LayerEntityFactoryContext,
-  LayerType,
   ScrawlEntityAdapter,
   ScrawlFilterAdapter,
   ScrawlGroupAdapter,
   ScrawlStyleAdapter,
-} from '../shared/types';
+} from '../shared/scrawl';
 
 type ScrawlFactory = (items: Record<string, unknown>) => ScrawlEntityAdapter;
 

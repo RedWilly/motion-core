@@ -4,9 +4,11 @@ import type {
   LayerEffectState,
   LayerMaskConfig,
   LayerMaskState,
+} from './project';
+import type {
   ScrawlEffectConfig,
   ScrawlFilterAction,
-} from './types';
+} from './scrawl';
 
 export interface NormalizedCompositionConfig {
   width: number;
@@ -32,6 +34,16 @@ export function assertPositiveNumber(value: number, propertyName: string): void 
     throw validationError(
       'INVALID_POSITIVE_NUMBER',
       `${propertyName} must be a positive number.`,
+      { propertyName, value },
+    );
+  }
+}
+
+export function assertNonNegativeNumber(value: number, propertyName: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw validationError(
+      'INVALID_NON_NEGATIVE_NUMBER',
+      `${propertyName} must be a non-negative number.`,
       { propertyName, value },
     );
   }

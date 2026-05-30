@@ -1,12 +1,14 @@
 import { capabilityError } from '../shared/errors';
+import type { Layer } from '../shared/project';
 import type {
   CompositionRuntime,
   EngineAdapters,
   RenderAdapter,
+} from '../shared/runtime';
+import type {
   ScrawlCellAdapter,
   ScrawlGroupAdapter,
-  Layer,
-} from '../shared/types';
+} from '../shared/scrawl';
 import {
   createScrawlEntityFactories,
   type ScrawlFactoryModule,

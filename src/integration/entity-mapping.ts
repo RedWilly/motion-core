@@ -1,11 +1,13 @@
 import { validationError } from '../shared/errors';
 import type {
   Layer,
+  LayerType,
+} from '../shared/project';
+import type {
   LayerEntityFactory,
   LayerEntityFactoryContext,
-  LayerType,
   ScrawlEntityAdapter,
-} from '../shared/types';
+} from '../shared/scrawl';
 
 const fallbackEntityFactory: LayerEntityFactory = ({ name, type }) => ({
   name,

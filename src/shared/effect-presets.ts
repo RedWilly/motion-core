@@ -1,6 +1,6 @@
 import { validationError } from './errors';
-import type { ScrawlEffectConfig, ScrawlFilterAction, ScrawlFilterLine } from './types';
-import { assertPositiveNumber, assertUnitRange } from './validation';
+import type { ScrawlEffectConfig, ScrawlFilterAction, ScrawlFilterLine } from './scrawl';
+import { assertNonNegativeNumber, assertPositiveNumber, assertUnitRange } from './validation';
 
 export type RgbaColor = readonly [number, number, number, number];
 
@@ -85,8 +85,8 @@ export const effectPresets = {
 export function blur(config: BlurEffectConfig = {}): ScrawlEffectConfig {
   const radiusHorizontal = config.radiusHorizontal ?? config.radius ?? 1;
   const radiusVertical = config.radiusVertical ?? config.radius ?? 1;
-  assertNonNegative(radiusHorizontal, 'radiusHorizontal');
-  assertNonNegative(radiusVertical, 'radiusVertical');
+  assertNonNegativeNumber(radiusHorizontal, 'radiusHorizontal');
+  assertNonNegativeNumber(radiusVertical, 'radiusVertical');
 
   return createEffectConfig(config, {
     action: 'gaussian-blur',
@@ -157,7 +157,7 @@ export function tint(config: TintEffectConfig = {}): ScrawlEffectConfig {
 }
 
 export function brightness(config: UniformChannelModulationEffectConfig): ScrawlEffectConfig {
-  assertNonNegative(config.level, 'level');
+  assertNonNegativeNumber(config.level, 'level');
   return channels({
     ...config,
     red: config.level,
@@ -167,7 +167,7 @@ export function brightness(config: UniformChannelModulationEffectConfig): Scrawl
 }
 
 export function saturation(config: UniformChannelModulationEffectConfig): ScrawlEffectConfig {
-  assertNonNegative(config.level, 'level');
+  assertNonNegativeNumber(config.level, 'level');
   return channels({
     ...config,
     red: config.level,
@@ -178,10 +178,10 @@ export function saturation(config: UniformChannelModulationEffectConfig): Scrawl
 }
 
 export function channels(config: ChannelModulationEffectConfig = {}): ScrawlEffectConfig {
-  assertNonNegative(config.red ?? 1, 'red');
-  assertNonNegative(config.green ?? 1, 'green');
-  assertNonNegative(config.blue ?? 1, 'blue');
-  assertNonNegative(config.alpha ?? 1, 'alpha');
+  assertNonNegativeNumber(config.red ?? 1, 'red');
+  assertNonNegativeNumber(config.green ?? 1, 'green');
+  assertNonNegativeNumber(config.blue ?? 1, 'blue');
+  assertNonNegativeNumber(config.alpha ?? 1, 'alpha');
 
   return createEffectConfig(config, {
     action: 'modulate-channels',
@@ -218,15 +218,6 @@ function createEffectConfig(
     ],
     ...(config.opacity === undefined ? null : { opacity: config.opacity }),
   };
-}
-
-function assertNonNegative(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0) {
-    throw validationError('INVALID_NON_NEGATIVE_NUMBER', `${propertyName} must be a non-negative number.`, {
-      propertyName,
-      value,
-    });
-  }
 }
 
 function assertByte(value: number, propertyName: string): void {

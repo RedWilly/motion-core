@@ -1,5 +1,6 @@
 import { capabilityError, validationError } from '../shared/errors';
-import type { Layer, MediaSyncTarget, VideoLayerConfig } from '../shared/types';
+import type { Layer, VideoLayerConfig } from '../shared/project';
+import type { MediaSyncTarget } from '../shared/runtime';
 import { mapCompositionTimeToMediaTime, normalizeVideoLayerConfig, type NormalizedVideoLayerConfig } from './media-metadata';
 
 export type VideoFrameSource = Blob | string | URL | Request;
