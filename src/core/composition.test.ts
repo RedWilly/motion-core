@@ -452,6 +452,92 @@ describe('createComposition', () => {
     ]);
   });
 
+  test('syncFrame updates timeline-backed state without media or render side effects', () => {
+    const events: string[] = [];
+    let mediaTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        createRenderer() {
+          return {
+            play() {},
+            pause() {},
+            renderFrame() {
+              events.push('render');
+            },
+          };
+        },
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get() {
+              return mediaTime;
+            },
+            set(values) {
+              if (typeof values['video_currentTime'] === 'number') {
+                mediaTime = values['video_currentTime'];
+                events.push(`media-set:${mediaTime}`);
+              }
+              return this;
+            },
+            videoFastSeek(time) {
+              events.push(`media-seek:${time}`);
+            },
+          }),
+        },
+      },
+    );
+    const layer = composition.addLayer('shape', {
+      transform: { position: { x: 12, y: 18 } },
+    });
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    layer.scrawlEntity.set = (values) => {
+      setCalls.push({ ...values });
+      return layer.scrawlEntity;
+    };
+    composition.addVideo('clip.mp4');
+
+    composition.syncFrame(1.5);
+
+    expect(composition.timeline.time()).toBe(1.5);
+    expect(setCalls.at(-1)?.['startX']).toBe(12);
+    expect(setCalls.at(-1)?.['startY']).toBe(18);
+    expect(events).toEqual([]);
+  });
+
+  test('seek uses the clamped composition time for media targets', () => {
+    const mediaSeeks: number[] = [];
+    let mediaTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get() {
+              return mediaTime;
+            },
+            set(values) {
+              if (typeof values['video_currentTime'] === 'number') mediaTime = values['video_currentTime'];
+              return this;
+            },
+            videoFastSeek(time) {
+              mediaSeeks.push(time);
+            },
+          }),
+        },
+      },
+    );
+    composition.addVideo('clip.mp4');
+
+    composition.seek(8);
+
+    expect(composition.timeline.time()).toBe(2);
+    expect(mediaSeeks).toEqual([2]);
+  });
+
   test('installs a renderer frame callback for live playback sync', () => {
     let frameCallback: (() => void) | null = null;
     const setCalls: Array<Readonly<Record<string, unknown>>> = [];

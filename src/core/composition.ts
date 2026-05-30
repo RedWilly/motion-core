@@ -160,16 +160,6 @@ export function createComposition(
     startedAtMs: 0,
   };
 
-  const syncLiveFrame = (): void => {
-    if (livePlayback.running) {
-      const elapsedSeconds = (currentTimeMs() - livePlayback.startedAtMs) / 1000;
-      const nextTime = normalized.duration > 0 ? elapsedSeconds % normalized.duration : 0;
-      timeline.seek(nextTime, true);
-    }
-    syncCompositionFrame(runtime.layers, timeline.time(), precompositionTimes);
-    motionTargets.apply();
-  };
-
   const composition = {
     id,
     name: normalized.name,
@@ -395,6 +385,12 @@ export function createComposition(
 
     applyMotionTargets: () => motionTargets.apply(),
 
+    syncFrame(time = timeline.time(), suppressEvents = true): void {
+      this.timeline.seek(time, suppressEvents);
+      syncCompositionFrame(this.layers, this.timeline.time(), precompositionTimes);
+      motionTargets.apply();
+    },
+
     setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
       detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
       detachMaskFeather(effectsController, layer);
@@ -497,10 +493,9 @@ export function createComposition(
 
     seek(time: number): void {
       livePlayback.running = false;
-      this.timeline.seek(time);
-      syncCompositionFrame(this.layers, time, precompositionTimes);
-      for (const layer of this.layers) void layer.media?.seek(time);
-      motionTargets.apply();
+      this.syncFrame(time);
+      const syncedTime = this.timeline.time();
+      for (const layer of this.layers) void layer.media?.seek(syncedTime);
       void this.renderer.renderFrame();
     },
 
@@ -508,6 +503,16 @@ export function createComposition(
       return serializeComposition(this);
     },
   } satisfies Composition;
+
+  const syncLiveFrame = (): void => {
+    if (livePlayback.running) {
+      const elapsedSeconds = (currentTimeMs() - livePlayback.startedAtMs) / 1000;
+      const nextTime = normalized.duration > 0 ? elapsedSeconds % normalized.duration : 0;
+      composition.syncFrame(nextTime, true);
+      return;
+    }
+    composition.syncFrame(composition.timeline.time(), true);
+  };
 
   composition.renderer.setFrameCallback?.(syncLiveFrame);
 

@@ -73,24 +73,20 @@ export async function syncToTimelineTime(
   time = composition.timeline.time(),
   options: SynchronizationOptions,
 ): Promise<void> {
-  composition.timeline.seek(time, true);
-
-  for (const layer of composition.layers) {
-    syncLayerToScrawl(layer);
-  }
-  composition.applyMotionTargets();
+  composition.syncFrame(time, true);
+  const syncedTime = composition.timeline.time();
 
   for (const target of options.media ?? []) {
-    await seekMediaTarget(target, time, options.frameRate, options.onDesync);
+    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
   }
 
   for (const layer of composition.layers) {
     const target = layer.media;
-    if (target !== undefined) await seekMediaTarget(target, time, options.frameRate, options.onDesync);
+    if (target !== undefined) await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
   }
 
   for (const hook of options.hooks ?? []) {
-    await hook.beforeRender(time);
+    await hook.beforeRender(syncedTime);
   }
 
   await composition.renderer.renderFrame();
@@ -145,24 +141,19 @@ export class TimelineSynchronizer {
   }
 
   async seek(time: number, suppressEvents = true): Promise<void> {
-    this.composition.timeline.seek(time, suppressEvents);
-    this.syncLayers();
-    await this.seekMedia(this.composition.timeline.time());
-    await this.runHooks(this.composition.timeline.time());
+    this.composition.syncFrame(time, suppressEvents);
+    const syncedTime = this.composition.timeline.time();
+    await this.seekMedia(syncedTime);
+    await this.runHooks(syncedTime);
     await this.composition.renderer.renderFrame();
   }
 
   async syncFrame(): Promise<void> {
+    this.composition.syncFrame();
     const time = this.composition.timeline.time();
-    this.syncLayers();
     await this.seekMedia(time);
     await this.runHooks(time);
     await this.composition.renderer.renderFrame();
-  }
-
-  private syncLayers(): void {
-    for (const layer of this.composition.layers) syncLayerToScrawl(layer);
-    this.composition.applyMotionTargets();
   }
 
   private async seekMedia(time: number): Promise<void> {

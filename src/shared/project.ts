@@ -268,6 +268,7 @@ export interface Composition {
   removeAsset(asset: CompositionAsset | string): void;
   registerMotionTarget(target: MotionStateTarget): () => void;
   applyMotionTargets(): void;
+  syncFrame(time?: number, suppressEvents?: boolean): void;
   setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
   setLayerMask(targetLayer: Layer, sourceLayer: Layer, config?: Omit<LayerMaskConfig, 'sourceLayerId'>): LayerMaskState;
   clearMask(layer: Layer): void;

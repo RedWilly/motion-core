@@ -154,6 +154,44 @@ describe('TimelineSynchronizer', () => {
     expect(order).toEqual(['media', 'hook:1', 'render']);
   });
 
+  test('syncs precomposition cells through the same frame path as composition seek', async () => {
+    const cellCalls: string[] = [];
+    const child = createComposition({ width: 50, height: 50, duration: 10 });
+    child.addShape({ name: 'child-shape' });
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 5 },
+      {
+        createPrecompositionCell(context) {
+          const cellGroup = {
+            name: `${context.layerName}-cell-group`,
+            moveArtefactsIntoGroup() {},
+            addArtefacts() {},
+          };
+          return {
+            name: `${context.layerName}-cell`,
+            getGroup() {
+              return cellGroup;
+            },
+            render() {
+              cellCalls.push(`render:${context.layerName}`);
+            },
+          };
+        },
+      },
+    );
+    composition.addPrecomposition(child, {
+      name: 'nested',
+      timeOffset: 0.5,
+      playbackRate: 2,
+    });
+    const sync = createTimelineSynchronizer(composition);
+
+    await sync.seek(2);
+
+    expect(child.timeline.time()).toBe(3);
+    expect(cellCalls).toEqual(['render:nested']);
+  });
+
   test('syncToTimelineTime also runs hooks before frame render', async () => {
     const order: string[] = [];
     const composition = createComposition(
