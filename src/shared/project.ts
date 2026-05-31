@@ -6,15 +6,15 @@ import type {
 } from './runtime';
 import type {
   ScrawlCellAdapter,
-  ScrawlEffectConfig,
   ScrawlEntityAdapter,
   ScrawlFilterAdapter,
-  ScrawlGradientConfig,
   ScrawlGroupAdapter,
-  ScrawlMaskConfig,
-  ScrawlPatternConfig,
-  ScrawlStyleState,
   ScrawlTransformState,
+  EffectConfig,
+  GradientConfig,
+  MaskConfig,
+  MotionStyle,
+  PatternConfig,
 } from './scrawl';
 
 export type LayerType =
@@ -68,7 +68,7 @@ export interface LayerConfig {
   text?: string;
   enhancedText?: EnhancedTextLayerConfig;
   variant?: 'emitter' | 'net' | 'tracer';
-  effects?: readonly ScrawlEffectConfig[];
+  effects?: readonly EffectConfig[];
   mask?: LayerMaskConfig;
   precomp?: PrecompositionLayerConfig;
 }
@@ -100,7 +100,7 @@ export interface ShapeStrokeConfig {
   readonly width?: number;
 }
 
-export type ShapePaintStyle = string | ScrawlStyleState;
+export type ShapePaintStyle = string | MotionStyle;
 
 export type EnhancedTextJustifyLine = 'start' | 'end' | 'center' | 'space-between' | 'space-around';
 
@@ -186,7 +186,7 @@ export interface PrecompositionLayerConfig {
 
 export type LayerMaskStrategy = 'entity' | 'cell';
 
-export interface LayerMaskConfig extends ScrawlMaskConfig {
+export interface LayerMaskConfig extends MaskConfig {
   readonly sourceLayerId?: string;
   readonly strategy?: LayerMaskStrategy;
 }
@@ -218,12 +218,12 @@ export interface TextLayerState extends MotionStateTarget<TextLayerMotionValues>
   readonly mode: 'enhanced';
 }
 
-export interface LayerEffectState extends Omit<ScrawlEffectConfig, 'id'>, MotionStateTarget {
+export interface LayerEffectState extends Omit<EffectConfig, 'id'>, MotionStateTarget {
   readonly id: string;
   scrawlFilter?: ScrawlFilterAdapter;
 }
 
-export interface LayerMaskState extends Required<Pick<ScrawlMaskConfig, 'mode'>> {
+export interface LayerMaskState extends Required<Pick<MaskConfig, 'mode'>> {
   readonly sourceLayerId?: string;
   readonly strategy: LayerMaskStrategy;
   readonly opacity?: number;
@@ -258,12 +258,12 @@ export interface Composition {
     readonly timeOffset?: number;
     readonly playbackRate?: number;
   }): Layer;
-  addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState;
+  addEffect(layer: Layer, config: EffectConfig): LayerEffectState;
   removeEffect(layer: Layer, effect: LayerEffectState | string): void;
   clearEffects(layer: Layer): void;
-  createGradient(config: ScrawlGradientConfig): ScrawlStyleState;
-  createPattern(config: ScrawlPatternConfig): ScrawlStyleState;
-  removeStyle(style: ScrawlStyleState): void;
+  createGradient(config: GradientConfig): MotionStyle;
+  createPattern(config: PatternConfig): MotionStyle;
+  removeStyle(style: MotionStyle): void;
   registerAsset(asset: CompositionAsset): CompositionAsset;
   removeAsset(asset: CompositionAsset | string): void;
   registerMotionTarget(target: MotionStateTarget): () => void;

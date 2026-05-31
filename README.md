@@ -27,13 +27,8 @@ bun run build
 
 The package intentionally keeps a small top-level map:
 
-- `motion-core/core`: composition and layer lifecycle.
-- `motion-core/animation`: GSAP-backed keyframes and expressions.
-- `motion-core/audio`: audio metadata, analysis, and reactive data helpers.
-- `motion-core/export`: frame, sequence, and video export orchestration.
-- `motion-core/integration`: Scrawl, GSAP, Mediabunny, serialization, and synchronization adapters.
-- `motion-core/shared`: shared types, errors, validation, and effect presets.
-- `motion-core`: barrel export for all public modules.
+- `motion-core`: primary engine API for compositions, animation, effects, browser setup, audio analysis, and export.
+- Internal source folders keep implementation concerns separated, but package consumers import from `motion-core` only.
 
 The codebase enforces this shape with module-boundary tests.
 
@@ -159,7 +154,7 @@ composition.removeEffect(image, 'blocks');
 composition.clearEffects(image);
 ```
 
-Preset helpers return plain `ScrawlEffectConfig` objects:
+Preset helpers return plain `EffectConfig` objects:
 
 - `blur`: emits `gaussian-blur`.
 - `threshold`: emits `threshold`.

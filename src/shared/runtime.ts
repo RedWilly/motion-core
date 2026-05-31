@@ -69,6 +69,11 @@ export interface EngineAdapters {
   importScrawlPacket?: (packet: string) => unknown;
 }
 
+export type MotionRuntimeAdapters = EngineAdapters;
+export type Renderer = RenderAdapter;
+export type Timeline = TimelineAdapter;
+export type TimelineTween = TimelineTweenAdapter;
+
 export interface PrecompositionCellFactoryContext {
   readonly parent: CompositionRuntime;
   readonly composition: Composition;

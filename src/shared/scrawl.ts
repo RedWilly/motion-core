@@ -64,6 +64,11 @@ export interface ScrawlEffectConfig {
   readonly opacity?: number;
 }
 
+export type EffectActionName = ScrawlFilterActionName;
+export type EffectLine = ScrawlFilterLine;
+export type EffectAction = ScrawlFilterAction;
+export type EffectConfig = ScrawlEffectConfig;
+
 export type ScrawlMaskMode =
   | 'clip'
   | 'copy'
@@ -86,10 +91,15 @@ export interface ScrawlMaskConfig {
   readonly memoize?: boolean;
 }
 
+export type MaskMode = ScrawlMaskMode;
+export type MaskConfig = ScrawlMaskConfig;
+
 export interface ScrawlEffectHandle {
   readonly id: string;
   readonly filter: ScrawlFilterAdapter;
 }
+
+export type EffectHandle = ScrawlEffectHandle;
 
 export type ScrawlGradientKind = 'linear' | 'radial' | 'conic';
 
@@ -113,6 +123,10 @@ export interface ScrawlGradientConfig {
   readonly [key: string]: unknown;
 }
 
+export type GradientKind = ScrawlGradientKind;
+export type GradientColorStop = ScrawlGradientColorStop;
+export type GradientConfig = ScrawlGradientConfig;
+
 export interface ScrawlPatternConfig {
   readonly id?: string;
   readonly asset?: string;
@@ -122,6 +136,8 @@ export interface ScrawlPatternConfig {
   readonly removeAssetOnKill?: boolean | string;
   readonly [key: string]: unknown;
 }
+
+export type PatternConfig = ScrawlPatternConfig;
 
 export interface ScrawlStyleAdapter {
   readonly name: string;
@@ -136,6 +152,9 @@ export interface ScrawlStyleState<TValues extends Record<string, number> = Recor
   readonly id: string;
   readonly style: ScrawlStyleAdapter;
 }
+
+export type MotionStyle<TValues extends Record<string, number> = Record<string, number>> =
+  ScrawlStyleState<TValues>;
 
 export interface ScrawlTransformState {
   startX: number;
