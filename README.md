@@ -138,6 +138,8 @@ animation.addKeyframe(layer, 'position.x', 2, 900, {
   easing: 'power2.inOut',
 });
 
+animation.editKeyframe(layer, 'position.x', 2, 760);
+
 composition.seek(1);
 ```
 
@@ -390,6 +392,67 @@ const frame = createEmptyAudioAnalysisFrame();
 audioAnalyzer.analyzeInto(frame);
 ```
 
+## Live Editing
+
+Live editor controls should update `motion-core` state first. Scrawl then receives the synced render state.
+
+The default edit mode is `set`: change the value now, sync the frame, and render if the session is configured to render.
+
+```ts
+const live = createLiveEditSession(composition);
+
+const blurEffect = composition.addEffect(layer, blur({
+  id: 'blur',
+  radius: 0,
+}));
+
+live.bindInput(blurRadiusInput, blurEffect.values, 'radius', {
+  parse: 'float',
+});
+```
+
+Layer motion properties have their own binding path, so editor controls and animation use the same property map:
+
+```ts
+live.bindLayerInput(xInput, layer, 'position.x', {
+  parse: 'float',
+});
+```
+
+For animation-aware editing, use `autoKey` mode. That changes the value now and records it on the timeline.
+
+```ts
+const animation = createAnimationController(composition);
+
+live.setLayerProperty(layer, 'position.x', 400, {
+  mode: 'autoKey',
+  animation,
+  time: composition.timeline.time(),
+});
+
+live.setValue(blurEffect.values, 'radius', 12, {
+  mode: 'autoKey',
+  time: composition.timeline.time(),
+});
+```
+
+Manual keyframes are still available through the animation controller:
+
+```ts
+animation.addKeyframe(layer, 'position.x', 0, 100);
+animation.addKeyframe(layer, 'position.x', 2, 900);
+```
+
+If the user goes back to an existing keyframe and edits it, use `editKeyframe`:
+
+```ts
+animation.editKeyframe(layer, 'position.x', 0, 140);
+```
+
+`editKeyframe` creates the keyframe when it does not exist, and replaces the keyframe at that exact time when it does. Live `autoKey` uses this same behavior for layer motion properties, so repeated edits at the same playhead time update one keyframe instead of stacking duplicates.
+
+The session batches fast input events into one frame sync. That keeps sliders responsive without turning every input event into a separate render pass.
+
 ## Export
 
 Frame export seeks the composition, renders one frame, and captures the renderer canvas.
@@ -462,6 +525,7 @@ The public API is curated through `src/public`. Implementation folders stay sepa
 
 - `src/core`: composition lifecycle and runtime state.
 - `src/animation`: keyframes, expressions, and GSAP-backed motion.
+- `src/editor`: browser live-edit bindings that write into motion-core state first.
 - `src/integration`: Scrawl, GSAP, Mediabunny, serialization, and sync adapters.
 - `src/audio`: audio analysis and audio media bridge.
 - `src/export`: frame, sequence, and video export.

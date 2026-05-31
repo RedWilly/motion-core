@@ -3,16 +3,15 @@ import type { Composition, Layer } from '../shared/project';
 import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime';
 import { createId } from '../shared/ids';
 import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
+import {
+  bindLayerMotionProperty,
+  readNumericBinding,
+  writeNumericBinding,
+  type LayerMotionProperty,
+  type NumericPropertyBinding,
+} from '../shared/layer-properties';
 
-export type AnimatableProperty =
-  | 'position.x'
-  | 'position.y'
-  | 'rotation'
-  | 'scale.x'
-  | 'scale.y'
-  | 'anchor.x'
-  | 'anchor.y'
-  | 'opacity';
+export type AnimatableProperty = LayerMotionProperty;
 
 export type Easing = string | ((progress: number) => number);
 
@@ -89,10 +88,7 @@ export interface ExpressionApplyResult {
 
 export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
 
-interface PropertyBinding {
-  target: object;
-  key: string;
-}
+type PropertyBinding = NumericPropertyBinding;
 
 interface CompiledExpression extends Expression {
   evaluate: (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
@@ -121,7 +117,7 @@ export class AnimationController {
     this.assertLayerCanAnimate(layer);
     this.assertTimeInRange(time);
 
-    const binding = bindProperty(layer, property);
+    const binding = bindLayerMotionProperty(layer, property);
     const propertyKeyframes = this.getPropertyKeyframes(layer, property);
     const previous = findPreviousKeyframe(propertyKeyframes, time);
     const startTime = previous?.time ?? 0;
@@ -146,6 +142,23 @@ export class AnimationController {
     return keyframe;
   }
 
+  editKeyframe(
+    layer: Layer,
+    property: AnimatableProperty,
+    time: number,
+    value: number,
+    config: KeyframeConfig = {},
+  ): Keyframe {
+    const existing = this.findKeyframe(layer, property, time);
+    if (existing !== undefined) this.removeKeyframe(layer, existing);
+    return this.addKeyframe(layer, property, time, value, config);
+  }
+
+  findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined {
+    this.assertTimeInRange(time);
+    return this.keyframes.get(layer)?.get(property)?.find((keyframe) => keyframe.time === time);
+  }
+
   removeKeyframe(layer: Layer, keyframe: Keyframe): void {
     const propertyKeyframes = this.keyframes.get(layer)?.get(keyframe.property);
     if (!propertyKeyframes) return;
@@ -167,7 +180,7 @@ export class AnimationController {
       const value = values[property];
       if (value === undefined) continue;
 
-      const binding = bindProperty(layer, property);
+      const binding = bindLayerMotionProperty(layer, property);
       const options: {
         duration: number;
         ease: Easing;
@@ -243,7 +256,7 @@ export class AnimationController {
 
   setExpression(layer: Layer, property: AnimatableProperty, source: string): Expression {
     this.assertLayerCanAnimate(layer);
-    const binding = bindProperty(layer, property);
+    const binding = bindLayerMotionProperty(layer, property);
     const compiled: CompiledExpression = {
       id: createId('expression'),
       layer,
@@ -286,7 +299,7 @@ export class AnimationController {
       if (layer.locked) continue;
 
       for (const expression of layerExpressions.values()) {
-        const binding = bindProperty(layer, expression.property);
+        const binding = bindLayerMotionProperty(layer, expression.property);
         const context = createExpressionContext(this.composition, layer, expression.property, binding, time, audio);
         try {
           const value = expression.evaluate(context, createExpressionHelpers(time, expression.id));
@@ -401,27 +414,6 @@ export function createExpressionRenderHook(
   };
 }
 
-function bindProperty(layer: Layer, property: AnimatableProperty): PropertyBinding {
-  switch (property) {
-    case 'position.x':
-      return { target: layer.transform.position, key: 'x' };
-    case 'position.y':
-      return { target: layer.transform.position, key: 'y' };
-    case 'rotation':
-      return { target: layer.transform, key: 'rotation' };
-    case 'scale.x':
-      return { target: layer.transform.scale, key: 'x' };
-    case 'scale.y':
-      return { target: layer.transform.scale, key: 'y' };
-    case 'anchor.x':
-      return { target: layer.transform.anchor, key: 'x' };
-    case 'anchor.y':
-      return { target: layer.transform.anchor, key: 'y' };
-    case 'opacity':
-      return { target: layer, key: 'opacity' };
-  }
-}
-
 function compileExpression(source: string): CompiledExpression['evaluate'] {
   if (source.trim().length === 0) {
     throw validationError('EMPTY_EXPRESSION', 'Expression source must not be empty.');
@@ -485,7 +477,7 @@ function createExpressionHelpers(time: number, expressionId: string): Expression
 }
 
 function readBindingValue(binding: PropertyBinding): number {
-  const value = (binding.target as Record<string, unknown>)[binding.key];
+  const value = readNumericBinding(binding);
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw validationError('EXPRESSION_PROPERTY_NOT_NUMERIC', 'Expression property value must be numeric.', {
       propertyName: binding.key,
@@ -496,7 +488,7 @@ function readBindingValue(binding: PropertyBinding): number {
 }
 
 function writeBindingValue(binding: PropertyBinding, value: number): void {
-  (binding.target as Record<string, number>)[binding.key] = value;
+  writeNumericBinding(binding, value);
 }
 
 function numberExpressionResult(value: unknown, property: AnimatableProperty): number {

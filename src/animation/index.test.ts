@@ -175,6 +175,21 @@ describe('AnimationController', () => {
     expect(layer.transform.position.x).toBe(0);
   });
 
+  test('editKeyframe replaces an existing keyframe at the same time', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+
+    const first = controller.editKeyframe(layer, 'position.x', 1, 100);
+    const second = controller.editKeyframe(layer, 'position.x', 1, 240);
+
+    expect(second).not.toBe(first);
+    expect(controller.findKeyframe(layer, 'position.x', 1)).toBe(second);
+
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(240);
+  });
+
   test('evaluates expressions with time, frame, layer, and helper context', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5, frameRate: 24 });
     const layer = composition.addLayer('shape', {

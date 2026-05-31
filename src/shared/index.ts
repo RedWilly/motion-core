@@ -1,6 +1,7 @@
 export * from './effect-presets';
 export * from './errors';
 export * from './ids';
+export * from './layer-properties';
 export * from './project';
 export * from './runtime';
 export * from './scrawl';

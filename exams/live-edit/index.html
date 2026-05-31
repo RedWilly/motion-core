@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>motion-core live edit exam</title>
+    <link rel="stylesheet" href="../shared.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.15.0/+esm",
+          "mediabunny": "https://cdn.jsdelivr.net/npm/mediabunny@1.44.0/+esm",
+          "scrawl-canvas": "https://cdn.jsdelivr.net/npm/scrawl-canvas@8.19.0/+esm"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="exam-shell live-edit-shell">
+      <header class="exam-header">
+        <h1>Live editing, keyframes, effects</h1>
+        <a href="../">All exams</a>
+      </header>
+
+      <section class="workspace-grid">
+        <section class="canvas-wrap">
+          <canvas id="live-edit-canvas" width="960" height="540"></canvas>
+        </section>
+
+        <aside class="control-panel" aria-label="Live edit controls">
+          <div class="control-row compact-row">
+            <button id="play-toggle" type="button">Play</button>
+            <button id="seek-start" type="button">Start</button>
+            <button id="seek-mid" type="button">Mid</button>
+            <button id="seek-end" type="button">End</button>
+          </div>
+
+          <label class="control-item wide-control" for="timeline">
+            <span>Time</span>
+            <input id="timeline" type="range" min="0" max="4" step="0.01" value="0">
+          </label>
+
+          <label class="toggle-row" for="auto-key">
+            <input id="auto-key" type="checkbox">
+            <span>Auto-key layer edits</span>
+          </label>
+
+          <div class="control-row compact-row">
+            <button id="key-start" type="button">Key 0s</button>
+            <button id="key-end" type="button">Key 4s</button>
+            <button id="edit-key" type="button">Edit key</button>
+          </div>
+
+          <label class="control-item" for="position-x">
+            <span>X</span>
+            <input id="position-x" type="range" min="120" max="840" step="1" value="260">
+          </label>
+
+          <label class="control-item" for="position-y">
+            <span>Y</span>
+            <input id="position-y" type="range" min="120" max="420" step="1" value="270">
+          </label>
+
+          <label class="control-item" for="rotation">
+            <span>Rotation</span>
+            <input id="rotation" type="range" min="-180" max="360" step="1" value="0">
+          </label>
+
+          <label class="control-item" for="scale-x">
+            <span>Scale</span>
+            <input id="scale-x" type="range" min="0.4" max="2.2" step="0.01" value="1">
+          </label>
+
+          <label class="control-item" for="opacity">
+            <span>Opacity</span>
+            <input id="opacity" type="range" min="0.1" max="1" step="0.01" value="0.88">
+          </label>
+
+          <label class="control-item" for="blur-radius">
+            <span>Blur</span>
+            <input id="blur-radius" type="range" min="0" max="18" step="0.1" value="0">
+          </label>
+
+          <label class="control-item" for="fill-opacity">
+            <span>Fill</span>
+            <input id="fill-opacity" type="range" min="0" max="1" step="0.01" value="1">
+          </label>
+
+          <label class="control-item" for="stroke-width">
+            <span>Stroke</span>
+            <input id="stroke-width" type="range" min="0" max="18" step="0.1" value="4">
+          </label>
+        </aside>
+      </section>
+
+      <footer class="exam-footer">
+        <span>Controls write to motion-core state first; Scrawl receives synced render state.</span>
+        <span id="status" class="status">Loading</span>
+      </footer>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
