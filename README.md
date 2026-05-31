@@ -1,13 +1,20 @@
-# Motion Graphics Engine Core
+motion-core is a small TypeScript engine for building 2D motion work in the browser.
 
-Thin TypeScript orchestration over Scrawl-canvas, GSAP, and Mediabunny for programmatic 2D motion graphics.
+It sits between three libraries:
 
-This package does not try to replace those libraries. The core rule is:
+- Scrawl-canvas draws things, owns the canvas scene, and handles Cells, Groups, entities, filters, styles, and render cycles.
+- GSAP owns timeline movement, easing, and choreography.
+- Mediabunny owns media metadata, decoding, frame/audio access, and export plumbing.
 
-- Scrawl-canvas owns rendering, scene graph objects, Cells, Groups, entities, filters, and canvas display cycles.
-- GSAP owns timeline interpolation and choreography.
-- Mediabunny owns media metadata, demuxing/decoding/encoding, and container output.
-- This engine owns the typed composition/layer model, adapter wiring, validation, serialization metadata, and synchronization glue.
+This package is the part that keeps those jobs lined up. It gives you a typed composition model, layers, animation state, effects, masks, media sync, serialization, and export helpers without asking app code to glue every library together by hand.
+
+The package has one public import path:
+
+```ts
+import { createComposition } from 'motion-core';
+```
+
+The source code is split into folders, but package users should import from `motion-core` only. That keeps the public API small while the internals can keep changing as the engine gets better.
 
 ## Install
 
@@ -15,7 +22,17 @@ This package does not try to replace those libraries. The core rule is:
 bun install
 ```
 
-## Verify
+The browser/runtime libraries are peer dependencies:
+
+```json
+{
+  "gsap": "^3.15.0",
+  "mediabunny": "^1.44.0",
+  "scrawl-canvas": "^8.19.0"
+}
+```
+
+## Check The Project
 
 ```bash
 bun run typecheck
@@ -23,18 +40,9 @@ bun test
 bun run build
 ```
 
-## Public Module Map
+## A Small Composition
 
-The package intentionally keeps a small top-level map:
-
-- `motion-core`: primary engine API for compositions, animation, effects, browser setup, audio analysis, and export.
-- Internal source folders keep implementation concerns separated, but package consumers import from `motion-core` only.
-
-The codebase enforces this shape with module-boundary tests.
-
-## Browser Scrawl Setup
-
-Use `loadBrowserScrawlAdapter` when running in a browser with a real `<canvas>`.
+For browser preview, start with a real canvas and the Scrawl adapter.
 
 ```ts
 import {
@@ -55,7 +63,7 @@ const composition = createComposition(
     width: 1920,
     height: 1080,
     duration: 8,
-    frameRate: 30,
+    frameRate: 60,
     backgroundColor: '#101114',
   },
   adapters,
@@ -73,15 +81,7 @@ composition.seek(0);
 composition.play();
 ```
 
-The browser adapter creates:
-
-- Scrawl entity factories for layer types.
-- One Scrawl Group for the composition.
-- One Scrawl Render object for preview playback.
-- A Scrawl effects controller through `makeFilter`.
-- Scrawl layer Cells for precomposition layers when the canvas exposes `buildCell`.
-
-Prefer the typed layer helpers for application code:
+Layer helpers are the normal way to add content:
 
 ```ts
 composition.addShape({ name: 'background' });
@@ -92,24 +92,83 @@ composition.addAudio('/assets/voice.wav', { name: 'voice' });
 composition.addSvg('/assets/logo.svg', { name: 'logo' });
 ```
 
-`addLayer` remains available as the lower-level primitive when a caller already has a `LayerType` and wants to dispatch dynamically. URL-backed image, video, audio, and SVG layers are registered in `composition.assets` automatically and are removed with their owning layer.
+`addLayer` still exists for dynamic code, but most app code should use the typed helpers.
 
-Generated runtime resources can be registered explicitly when the host needs them to appear in serialized project metadata:
+## Playback
+
+The public controls are simple:
 
 ```ts
-composition.registerAsset({
-  id: 'style:orb-gradient',
-  kind: 'style',
-  sourceType: 'generated',
-  label: 'orb-gradient',
+composition.play();
+composition.pause();
+composition.seek(2.5);
+```
+
+Internally, `composition.syncFrame()` is the single frame-state path. It updates the timeline, Scrawl layer state, precomposition Cells, and motion targets. It does not render and it does not seek media by itself.
+
+That separation matters. It keeps preview, seeking, export, effects, masks, and precompositions from each inventing their own frame logic.
+
+## Animation
+
+Use the animation controller for keyframes and expressions. GSAP stays responsible for interpolation; the engine syncs the resulting values into Scrawl.
+
+```ts
+import {
+  createAnimationController,
+  createComposition,
+} from 'motion-core';
+
+const composition = createComposition({
+  width: 1280,
+  height: 720,
+  duration: 5,
 });
+
+const layer = composition.addShape({
+  name: 'box',
+  transform: {
+    position: { x: 100, y: 120 },
+  },
+});
+
+const animation = createAnimationController(composition);
+
+animation.addKeyframe(layer, 'position.x', 0, 100);
+animation.addKeyframe(layer, 'position.x', 2, 900, {
+  easing: 'power2.inOut',
+});
+
+composition.seek(1);
+```
+
+For browser preview with GSAP, give the composition a GSAP timeline factory:
+
+```ts
+import {
+  createComposition,
+  createGsapTimelineFactory,
+  loadBrowserScrawlAdapter,
+} from 'motion-core';
+import { gsap } from 'gsap';
+
+const adapters = await loadBrowserScrawlAdapter({
+  canvas: 'preview-canvas',
+});
+
+adapters.createTimeline = createGsapTimelineFactory(gsap);
+
+const composition = createComposition({
+  width: 1280,
+  height: 720,
+  duration: 5,
+}, adapters);
 ```
 
 ## Effects
 
-Effects are Scrawl-canvas Filter objects attached to layer entities through the Scrawl filter mixin methods: `addFilters`, `removeFilters`, and `clearFilters`.
+Effects are Scrawl filters. The engine uses Scrawl's modern `actions` filter format.
 
-The engine uses Scrawl's modern `actions` filter form only. It does not emit legacy `method` filter configs. This is deliberate because action arrays are the Scrawl path for chained filter primitives.
+The preset helpers return plain `EffectConfig` objects:
 
 ```ts
 import {
@@ -149,20 +208,33 @@ composition.addEffect(image, pixelate({
   tileWidth: 12,
   tileHeight: 12,
 }));
-
-composition.removeEffect(image, 'blocks');
-composition.clearEffects(image);
 ```
 
-Preset helpers return plain `EffectConfig` objects:
+Effects can also be animated because their numeric action values are stable motion targets:
 
-- `blur`: emits `gaussian-blur`.
-- `threshold`: emits `threshold`.
-- `pixelate`: emits `pixelate`.
-- `tint`: emits `tint-channels`.
-- `brightness`, `saturation`, and `channels`: emit `modulate-channels`.
-- `grayscale`: emits `grayscale`.
-- `invert`: emits `invert-channels`.
+```ts
+const blurEffect = composition.addEffect(image, blur({
+  id: 'animated-blur',
+  radius: 0,
+}));
+
+composition.timeline.to?.(blurEffect.values, {
+  radius: 12,
+  duration: 0.5,
+}, 1.2);
+```
+
+Current presets:
+
+- `blur`
+- `threshold`
+- `pixelate`
+- `tint`
+- `brightness`
+- `saturation`
+- `channels`
+- `grayscale`
+- `invert`
 
 For advanced filters, pass Scrawl action objects directly:
 
@@ -189,17 +261,13 @@ composition.addEffect(image, {
 });
 ```
 
-Performance notes:
-
-- Scrawl filters are computationally expensive; use the smallest useful stack.
-- Filter order matters because Scrawl applies filters sequentially.
-- Use `memoize: true` on masks only when the filtered output is mostly static. Scrawl invalidates memoized output when the filtered object or its filter array changes.
+Filters are expensive. Keep stacks small, animate only the values you need, and memoize masks only when the output is mostly static.
 
 ## Masks
 
-There are two mask workflows in the current API.
+There are two mask paths.
 
-Same-layer masks are applied immediately to the target Scrawl entity:
+Same-layer masks apply directly to one Scrawl entity:
 
 ```ts
 const foreground = composition.addShape({
@@ -220,9 +288,7 @@ composition.setMask(foreground, {
 });
 ```
 
-`mode: 'clip'` maps to Scrawl's entity clipping path. Other modes map to canvas `globalCompositeOperation` values on the target entity. `feather` is implemented as a Scrawl `gaussian-blur` filter on the masked entity.
-
-Layer-to-layer masks are recorded as layer state and serialized:
+Layer-to-layer masks use a Scrawl Cell when the browser adapter can create one:
 
 ```ts
 const target = composition.addImage('/assets/subject.png', {
@@ -244,24 +310,13 @@ composition.setLayerMask(target, matte, {
 });
 ```
 
-Current behavior:
+The default layer-mask strategy is `cell`. The target and matte are moved into the Cell's Group. The target stamps first, the matte stamps after it, and `clip` maps to `destination-in` inside the Cell. The Cell output is then shown back in the parent composition.
 
-- The target layer stores `mask.sourceLayerId`.
-- The default strategy is `cell`.
-- The browser adapter creates a Scrawl layer Cell for the mask pair when Cell support is available.
-- The target and matte entities are moved into the Cell's namesake Group.
-- The target stamps first, and the matte stamps after it with `destination-in` when `mode: 'clip'`.
-- The Cell output stamps back into the base display at the target layer's order.
-- `feather` adds a Scrawl `gaussian-blur` filter to the matte entity.
-- The relationship survives serialization.
-
-Current limitation:
-
-- If an adapter does not expose layer Cell creation, the engine still records the relationship and hides the matte/source layer, but it cannot produce visual Cell compositing in that runtime.
+If the runtime cannot create Cells, the engine still records the mask relationship and hides the matte layer, but visual Cell compositing will not happen in that runtime.
 
 ## Precomposition
 
-Precomposition layers use Scrawl Cells as the offscreen target concept. A parent composition can hold a child composition as a `precomp` layer and remap the child time.
+Precomposition uses Scrawl Cells as nested render targets.
 
 ```ts
 const child = createComposition({
@@ -276,18 +331,15 @@ child.addText('Live', {
   name: 'label',
 });
 
-const parent = createComposition(
-  {
-    name: 'program',
-    width: 1920,
-    height: 1080,
-    duration: 10,
-    frameRate: 30,
-  },
-  adapters,
-);
+const parent = createComposition({
+  name: 'program',
+  width: 1920,
+  height: 1080,
+  duration: 10,
+  frameRate: 30,
+}, adapters);
 
-const precomp = parent.addPrecomposition(child, {
+parent.addPrecomposition(child, {
   name: 'lower-third-layer',
   timeOffset: 1,
   playbackRate: 1.5,
@@ -308,73 +360,13 @@ At `parent.seek(3)`, the child time is:
 const childTime = (3 - 1) * 1.5;
 ```
 
-The engine clamps that value to the child composition duration, seeks the child composition, and renders the precomp Cell when the computed child time changes. Circular precomposition references throw a validation error.
+The engine clamps that time to the child duration, seeks the child composition, and renders the child Cell only when the computed child time changes. Circular precomposition references throw.
 
-Current behavior:
+## Media
 
-- The API allocates and tracks the Scrawl Cell through the adapter.
-- When the Cell exposes its namesake Group, the child composition is rehosted into that Group so existing and future child layers compile into the precomp Cell.
-- The parent precomp layer uses the Cell name as its Picture source.
-- Child timeline sync is cached so repeated parent seeks to the same child time do not re-render the Cell.
+Video layers can use Scrawl's native Picture video controls when the source is a browser media element.
 
-## Serialization
-
-```ts
-import { deserializeComposition } from 'motion-core';
-
-const json = composition.serialize();
-const restored = deserializeComposition(json, adapters);
-```
-
-Serialization currently includes:
-
-- Composition metadata.
-- Layer transform, visibility, lock, opacity, source, content, parent id, z-index, and Scrawl entity packet when available.
-- Layer effect configs from runtime state.
-- Layer mask configs, including layer-to-layer `sourceLayerId`.
-- Timeline time and duration.
-- Asset metadata from `composition.assets`, including URL-backed layer sources and explicitly registered generated/style assets.
-
-Serialization stores asset references and labels, not opaque runtime objects. A `Blob`, decoded frame cache, WebCodecs handle, Scrawl object instance, or runtime `dispose` callback must be recreated by the host integration after load. Serialization intentionally does not include live `precomp.composition` object graphs. Nested composition persistence needs an explicit project-file format so it can avoid circular graphs and make asset ownership clear.
-
-## Animation And Sync
-
-Use `createAnimationController` for GSAP-backed property animation. GSAP is the interpolation owner; Scrawl entities receive synchronized state through `entity.set`.
-
-```ts
-import {
-  createAnimationController,
-  createComposition,
-} from 'motion-core';
-
-const composition = createComposition({
-  width: 1280,
-  height: 720,
-  duration: 5,
-});
-
-const layer = composition.addShape({
-  name: 'box',
-  transform: {
-    position: { x: 100, y: 120 },
-  },
-});
-
-const animation = createAnimationController(composition);
-
-animation.addKeyframe(layer, 'position.x', 0, 100);
-animation.addKeyframe(layer, 'position.x', 2, 900, {
-  easing: 'power2.inOut',
-});
-
-composition.seek(1);
-```
-
-GSAP timelines support tweens, timelines, easing, callbacks, and stagger-style choreography. This engine does not create independent Scrawl Tweens for layer animation because the project uses GSAP as the single timeline source.
-
-## Media Preview
-
-Video layers can use Scrawl's native Picture video controls when the source is a browser media element. For deterministic decoded-frame preview, the browser adapter exposes a Mediabunny bridge that decodes frames into one reusable Scrawl RawAsset canvas and installs that asset on the video Picture.
+For deterministic decoded-frame preview, the browser adapter also has a Mediabunny bridge. It decodes video frames into one reusable Scrawl RawAsset canvas and installs that asset on the video Picture.
 
 ```ts
 const video = composition.addVideo('/assets/clip.mp4', {
@@ -391,16 +383,22 @@ composition.seek(1.25);
 composition.play();
 ```
 
-`composition.play()`, `pause()`, and `seek(time)` are the public playback controls. The composition coordinates the GSAP timeline, Scrawl renderer, video frame bridge, and audio bridge through each layer's `media` target.
+Audio analysis uses reusable buffers so callers can avoid per-frame allocation:
+
+```ts
+const frame = createEmptyAudioAnalysisFrame();
+audioAnalyzer.analyzeInto(frame);
+```
 
 ## Export
 
-Frame export renders through the composition renderer and captures canvas data with `toBlob`.
-
-Video export delegates frame encoding/container writing to the configured video adapter. The Mediabunny integration is responsible for WebCodecs-backed encoding and muxing.
+Frame export seeks the composition, renders one frame, and captures the renderer canvas.
 
 ```ts
-import { exportFrame, exportFrameSequence } from 'motion-core';
+import {
+  exportFrame,
+  exportFrameSequence,
+} from 'motion-core';
 
 const frame = await exportFrame(composition, 2, {
   format: 'png',
@@ -417,23 +415,88 @@ const sequence = await exportFrameSequence(composition, {
 });
 ```
 
+Video export is delegated to a video export adapter. The built-in adapter path is Mediabunny-backed.
+
+```ts
+import { exportVideo } from 'motion-core';
+
+const videoBlob = await exportVideo(composition, {
+  format: 'mp4',
+  quality: 'high',
+  frameRate: 30,
+});
+```
+
+## Serialization
+
+```ts
+import { deserializeComposition } from 'motion-core';
+
+const json = composition.serialize();
+const restored = deserializeComposition(json, adapters);
+```
+
+Serialization includes composition metadata, layers, transforms, effects, masks, timeline time, duration, and asset metadata.
+
+It does not store live runtime objects like `Blob`s, decoded frames, WebCodecs handles, Scrawl instances, or dispose callbacks. Those need to be recreated by the host integration after load.
+
+Nested composition persistence is intentionally not solved yet. A proper project file format needs to handle child compositions, circular references, and asset ownership clearly.
+
+## Project Shape
+
+The package exports only `"."`.
+
+```json
+{
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  }
+}
+```
+
+The public API is curated through `src/public`. Implementation folders stay separate:
+
+- `src/core`: composition lifecycle and runtime state.
+- `src/animation`: keyframes, expressions, and GSAP-backed motion.
+- `src/integration`: Scrawl, GSAP, Mediabunny, serialization, and sync adapters.
+- `src/audio`: audio analysis and audio media bridge.
+- `src/export`: frame, sequence, and video export.
+- `src/shared`: shared contracts, validation, errors, and effect presets.
+
+That layout is deliberate. Users get one import path. The codebase still has clear internal boundaries.
+
 ## Browser Requirements
 
-For preview/rendering:
+For preview:
 
-- A modern browser with Canvas support.
-- Scrawl-canvas v8 runtime.
-- A real DOM `HTMLCanvasElement` for `loadBrowserScrawlAdapter`.
+- A modern browser.
+- A real `HTMLCanvasElement`.
+- Scrawl-canvas v8.
 
 For video export:
 
-- Browser APIs required by the selected encoder, typically WebCodecs for hardware-backed video encoding.
-- A configured video adapter, normally Mediabunny-backed.
+- Browser APIs required by the selected encoder.
+- Usually WebCodecs.
+- A video export adapter, normally Mediabunny-backed.
 
-For audio reactivity:
+For audio:
 
 - Web Audio API support.
-- Mediabunny for media metadata/decoding where audio files are involved.
+- Mediabunny when audio needs metadata or decoding.
+
+## Current Limits
+
+This is still early.
+
+- The root API is intentionally small.
+- Subpath package exports are not exposed.
+- Precomposition serialization is not a full project-file format yet.
+- Visual layer-to-layer masking needs a runtime that can create Scrawl Cells.
+- Very heavy filter stacks are still expensive because filters are real canvas work.
 
 ## References
 
