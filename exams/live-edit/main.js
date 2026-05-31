@@ -1,9 +1,8 @@
 import {
   blur,
-  createAnimationController,
   createComposition,
+  createEditorSession,
   createGsapTimelineFactory,
-  createLiveEditSession,
   loadBrowserScrawlAdapter,
 } from '../../dist/index.js';
 import { gsap } from 'gsap';
@@ -110,8 +109,8 @@ async function main() {
     },
   });
 
-  const animation = createAnimationController(composition);
-  const live = createLiveEditSession(composition);
+  const editor = createEditorSession(composition);
+  const animation = editor.animation;
   const blurEffect = shape.effects[0];
   const fill = shape.shape?.fill;
   const stroke = shape.shape?.stroke;
@@ -133,7 +132,37 @@ async function main() {
 
   function bindLayerControl(input, property) {
     input.addEventListener('input', () => {
-      live.setLayerProperty(shape, property, numberInput(input), {
+      editor.editLayer(shape, property, numberInput(input), {
+        ...editOptions(),
+        render: true,
+      });
+      updateStatus();
+    });
+  }
+
+  function bindEffectControl(input, effect, key) {
+    input.addEventListener('input', () => {
+      editor.editEffect(effect, key, numberInput(input), {
+        ...editOptions(),
+        render: true,
+      });
+      updateStatus();
+    });
+  }
+
+  function bindShapeFillControl(input, property) {
+    input.addEventListener('input', () => {
+      editor.editShapeFill(shape, property, numberInput(input), {
+        ...editOptions(),
+        render: true,
+      });
+      updateStatus();
+    });
+  }
+
+  function bindShapeStrokeControl(input, property) {
+    input.addEventListener('input', () => {
+      editor.editShapeStroke(shape, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -148,13 +177,13 @@ async function main() {
   bindLayerControl(controls.opacity, 'opacity');
 
   if (blurEffect !== undefined) {
-    live.bindInput(controls.blur, blurEffect.values, 'radius', { parse: 'float' });
+    bindEffectControl(controls.blur, blurEffect, 'radius');
   }
   if (fill !== undefined) {
-    live.bindInput(controls.fill, fill.values, 'opacity', { parse: 'float' });
+    bindShapeFillControl(controls.fill, 'opacity');
   }
   if (stroke !== undefined) {
-    live.bindInput(controls.stroke, stroke.values, 'width', { parse: 'float' });
+    bindShapeStrokeControl(controls.stroke, 'width');
   }
 
   document.getElementById('key-start')?.addEventListener('click', () => {
@@ -182,11 +211,11 @@ async function main() {
 
   playToggle?.addEventListener('click', () => {
     if (playToggle.dataset.playing === 'true') {
-      composition.pause();
+      editor.pause();
       playToggle.dataset.playing = 'false';
       playToggle.textContent = 'Play';
     } else {
-      composition.play();
+      editor.play();
       playToggle.dataset.playing = 'true';
       playToggle.textContent = 'Pause';
     }
@@ -210,7 +239,7 @@ async function main() {
   }
 
   function seekTo(time) {
-    composition.seek(time);
+    editor.seek(time);
     syncControlsFromState();
     updateStatus();
   }

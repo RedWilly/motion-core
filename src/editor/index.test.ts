@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createAnimationController } from '../animation';
 import { createComposition } from '../core/composition';
-import { createLiveEditSession, type LiveEditInput } from './index';
+import { createEditorSession, createLiveEditSession, type LiveEditInput } from './index';
 
 class FakeInput implements LiveEditInput {
   value: string;
@@ -206,5 +206,104 @@ describe('LiveEditSession', () => {
     composition.seek(2);
 
     expect(effect.values.radius).toBe(16);
+  });
+});
+
+describe('EditorSession', () => {
+  test('auto-keys layer edits through its owned animation controller', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 4 });
+    const layer = composition.addShape({
+      transform: { position: { x: 0, y: 0 } },
+    });
+    const editor = createEditorSession(composition, { render: false });
+
+    editor.editLayer(layer, 'position.x', 120, {
+      mode: 'autoKey',
+      time: 2,
+    });
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(60);
+    expect(editor.animation.findKeyframe(layer, 'position.x', 2)?.value).toBe(120);
+  });
+
+  test('edits effects and generic motion targets through the same value path', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 4 });
+    const layer = composition.addShape();
+    const effect = composition.addEffect(layer, {
+      id: 'blur',
+      actions: [{ action: 'gaussian-blur', radius: 0 }],
+    });
+    const editor = createEditorSession(composition, { render: false });
+
+    editor.editEffect(effect, 'radius', 18, {
+      mode: 'autoKey',
+      time: 2,
+    });
+    effect.values.radius = 0;
+    composition.seek(2);
+
+    expect(effect.values.radius).toBe(18);
+  });
+
+  test('edits enhanced text values and applies them on flush', () => {
+    const updates: Record<string, unknown>[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        entityFactories: {
+          text: ({ name, type }) => ({
+            name,
+            type,
+            set(values) {
+              updates.push(values);
+              return this;
+            },
+          }),
+        },
+      },
+    );
+    const layer = composition.addText('Hello', {
+      textMode: 'enhanced',
+      enhancedText: { lineSpacing: 1 },
+    });
+    const editor = createEditorSession(composition, { render: false });
+
+    editor.editText(layer, 'lineSpacing', 1.5);
+    editor.flush();
+
+    expect(layer.textState?.values.lineSpacing).toBe(1.5);
+    expect(updates).toContainEqual({ lineSpacing: 1.5 });
+  });
+
+  test('routes mask and playback edits through the composition', () => {
+    const events: string[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        createRenderer() {
+          return {
+            play() {
+              events.push('play');
+            },
+            pause() {
+              events.push('pause');
+            },
+            renderFrame() {},
+          };
+        },
+      },
+    );
+    const layer = composition.addShape();
+    const editor = createEditorSession(composition, { render: false });
+
+    editor.setMask(layer, { mode: 'clip', opacity: 0.5 });
+    editor.play();
+    editor.pause();
+    editor.seek(0);
+    editor.clearMask(layer);
+
+    expect(layer.mask).toBeNull();
+    expect(events).toEqual(['play', 'pause']);
   });
 });

@@ -31,8 +31,16 @@ export {
   threshold,
   tint,
 } from '../shared/effect-presets';
-export { createLiveEditSession } from '../editor';
+export { createEditorSession, createLiveEditSession } from '../editor';
 export type {
+  EditorBindingOptions,
+  EditorEditOptions,
+  EditorLayerProperty,
+  EditorSession,
+  EditorSessionOptions,
+  EditorShapeFillProperty,
+  EditorShapeStrokeProperty,
+  EditorTextProperty,
   LiveEditBindingOptions,
   LiveEditOptions,
   LiveEditInput,
