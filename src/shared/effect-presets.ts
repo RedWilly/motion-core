@@ -1,13 +1,13 @@
 import { validationError } from './errors';
-import type { ScrawlEffectConfig, ScrawlFilterAction, ScrawlFilterLine } from './types';
-import { assertPositiveNumber, assertUnitRange } from './validation';
+import type { EffectAction, EffectConfig, EffectLine } from './scrawl';
+import { assertNonNegativeNumber, assertPositiveNumber, assertUnitRange } from './validation';
 
 export type RgbaColor = readonly [number, number, number, number];
 
 export interface EffectPresetBase {
   readonly id?: string;
   readonly opacity?: number;
-  readonly lineIn?: ScrawlFilterLine;
+  readonly lineIn?: EffectLine;
   readonly lineOut?: string;
 }
 
@@ -70,6 +70,9 @@ export interface UniformChannelModulationEffectConfig extends EffectPresetBase {
   readonly level: number;
 }
 
+export type BrightnessEffectConfig = UniformChannelModulationEffectConfig;
+export type SaturationEffectConfig = UniformChannelModulationEffectConfig;
+
 export const effectPresets = {
   blur,
   brightness,
@@ -82,11 +85,11 @@ export const effectPresets = {
   tint,
 } as const;
 
-export function blur(config: BlurEffectConfig = {}): ScrawlEffectConfig {
+export function blur(config: BlurEffectConfig = {}): EffectConfig {
   const radiusHorizontal = config.radiusHorizontal ?? config.radius ?? 1;
   const radiusVertical = config.radiusVertical ?? config.radius ?? 1;
-  assertNonNegative(radiusHorizontal, 'radiusHorizontal');
-  assertNonNegative(radiusVertical, 'radiusVertical');
+  assertNonNegativeNumber(radiusHorizontal, 'radiusHorizontal');
+  assertNonNegativeNumber(radiusVertical, 'radiusVertical');
 
   return createEffectConfig(config, {
     action: 'gaussian-blur',
@@ -102,7 +105,7 @@ export function blur(config: BlurEffectConfig = {}): ScrawlEffectConfig {
   });
 }
 
-export function threshold(config: ThresholdEffectConfig = {}): ScrawlEffectConfig {
+export function threshold(config: ThresholdEffectConfig = {}): EffectConfig {
   const level = config.level ?? 128;
   assertByte(level, 'level');
   const high = cloneColor(config.high ?? [255, 255, 255, 255]);
@@ -121,7 +124,7 @@ export function threshold(config: ThresholdEffectConfig = {}): ScrawlEffectConfi
   });
 }
 
-export function pixelate(config: PixelateEffectConfig): ScrawlEffectConfig {
+export function pixelate(config: PixelateEffectConfig): EffectConfig {
   const tileHeight = config.tileHeight ?? config.tileWidth;
   assertPositiveNumber(config.tileWidth, 'tileWidth');
   assertPositiveNumber(tileHeight, 'tileHeight');
@@ -139,8 +142,8 @@ export function pixelate(config: PixelateEffectConfig): ScrawlEffectConfig {
   });
 }
 
-export function tint(config: TintEffectConfig = {}): ScrawlEffectConfig {
-  const action: ScrawlFilterAction = {
+export function tint(config: TintEffectConfig = {}): EffectConfig {
+  const action: EffectAction = {
     action: 'tint-channels',
     redInRed: config.redInRed ?? 1,
     redInGreen: config.redInGreen ?? 0,
@@ -156,8 +159,8 @@ export function tint(config: TintEffectConfig = {}): ScrawlEffectConfig {
   return createEffectConfig(config, action);
 }
 
-export function brightness(config: UniformChannelModulationEffectConfig): ScrawlEffectConfig {
-  assertNonNegative(config.level, 'level');
+export function brightness(config: UniformChannelModulationEffectConfig): EffectConfig {
+  assertNonNegativeNumber(config.level, 'level');
   return channels({
     ...config,
     red: config.level,
@@ -166,8 +169,8 @@ export function brightness(config: UniformChannelModulationEffectConfig): Scrawl
   });
 }
 
-export function saturation(config: UniformChannelModulationEffectConfig): ScrawlEffectConfig {
-  assertNonNegative(config.level, 'level');
+export function saturation(config: UniformChannelModulationEffectConfig): EffectConfig {
+  assertNonNegativeNumber(config.level, 'level');
   return channels({
     ...config,
     red: config.level,
@@ -177,11 +180,11 @@ export function saturation(config: UniformChannelModulationEffectConfig): Scrawl
   });
 }
 
-export function channels(config: ChannelModulationEffectConfig = {}): ScrawlEffectConfig {
-  assertNonNegative(config.red ?? 1, 'red');
-  assertNonNegative(config.green ?? 1, 'green');
-  assertNonNegative(config.blue ?? 1, 'blue');
-  assertNonNegative(config.alpha ?? 1, 'alpha');
+export function channels(config: ChannelModulationEffectConfig = {}): EffectConfig {
+  assertNonNegativeNumber(config.red ?? 1, 'red');
+  assertNonNegativeNumber(config.green ?? 1, 'green');
+  assertNonNegativeNumber(config.blue ?? 1, 'blue');
+  assertNonNegativeNumber(config.alpha ?? 1, 'alpha');
 
   return createEffectConfig(config, {
     action: 'modulate-channels',
@@ -193,18 +196,18 @@ export function channels(config: ChannelModulationEffectConfig = {}): ScrawlEffe
   });
 }
 
-export function grayscale(config: EffectPresetBase = {}): ScrawlEffectConfig {
+export function grayscale(config: EffectPresetBase = {}): EffectConfig {
   return createEffectConfig(config, { action: 'grayscale' });
 }
 
-export function invert(config: EffectPresetBase = {}): ScrawlEffectConfig {
+export function invert(config: EffectPresetBase = {}): EffectConfig {
   return createEffectConfig(config, { action: 'invert-channels' });
 }
 
 function createEffectConfig(
   config: EffectPresetBase,
-  action: ScrawlFilterAction,
-): ScrawlEffectConfig {
+  action: EffectAction,
+): EffectConfig {
   if (config.opacity !== undefined) assertUnitRange(config.opacity, 'opacity');
 
   return {
@@ -218,15 +221,6 @@ function createEffectConfig(
     ],
     ...(config.opacity === undefined ? null : { opacity: config.opacity }),
   };
-}
-
-function assertNonNegative(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0) {
-    throw validationError('INVALID_NON_NEGATIVE_NUMBER', `${propertyName} must be a non-negative number.`, {
-      propertyName,
-      value,
-    });
-  }
 }
 
 function assertByte(value: number, propertyName: string): void {

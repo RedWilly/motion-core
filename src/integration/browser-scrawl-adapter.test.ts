@@ -69,6 +69,19 @@ function createFakeScrawl() {
         },
       };
     },
+    makeRawAsset(items) {
+      return {
+        name: String(items['name']),
+        element: { width: 0, height: 0 } as HTMLCanvasElement,
+        engine: { clearRect() {} } as unknown as CanvasRenderingContext2D,
+        set() {
+          return this;
+        },
+        kill() {
+          return undefined;
+        },
+      };
+    },
     purge(namespace) {
       calls.purge = namespace;
     },

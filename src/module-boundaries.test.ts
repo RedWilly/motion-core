@@ -14,6 +14,7 @@ const expectedTopLevelModules = new Set([
   'core',
   'export',
   'integration',
+  'public',
   'shared',
 ]);
 
@@ -23,6 +24,7 @@ const allowedProductionDependencies = new Map<string, ReadonlySet<string>>([
   ['core', new Set(['integration', 'shared'])],
   ['export', new Set(['integration', 'shared'])],
   ['integration', new Set(['shared'])],
+  ['public', new Set(['animation', 'audio', 'core', 'export', 'integration', 'shared'])],
   ['shared', new Set()],
 ]);
 
@@ -150,6 +152,7 @@ describe('module boundaries', () => {
 
     for (const [module, deps] of graph) {
       if (supportModules.has(module)) continue;
+      if (module === 'public') continue;
       expect(deps.size, `${module} has too many direct dependencies`).toBeLessThanOrEqual(
         maxDependenciesPerModule,
       );

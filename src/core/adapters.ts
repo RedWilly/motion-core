@@ -3,7 +3,7 @@ import type {
   RenderAdapter,
   TimelineAdapter,
   TimelineTweenAdapter,
-} from '../shared/types';
+} from '../shared/runtime';
 
 interface MemoryTween extends TimelineTweenAdapter {
   target: Record<string, unknown>;

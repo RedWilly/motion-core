@@ -2,8 +2,9 @@ import type {
   AudioLayerConfig,
   MediaLayerConfig,
   VideoLayerConfig,
-} from '../shared/types';
+} from '../shared/project';
 import { EngineError, validationError } from '../shared/errors';
+import { assertNonNegativeNumber, assertPositiveNumber, assertUnitRange } from '../shared/validation';
 
 export interface VideoMetadata {
   codec: string | null;
@@ -144,8 +145,8 @@ export function normalizeAudioLayerConfig(config: AudioLayerConfig = {}): Normal
   const fadeOut = config.fadeOut ?? 0;
 
   assertUnitRange(volume, 'volume');
-  assertNonNegative(fadeIn, 'fadeIn');
-  assertNonNegative(fadeOut, 'fadeOut');
+  assertNonNegativeNumber(fadeIn, 'fadeIn');
+  assertNonNegativeNumber(fadeOut, 'fadeOut');
 
   return { ...base, volume, fadeIn, fadeOut };
 }
@@ -154,7 +155,7 @@ export function mapCompositionTimeToMediaTime(
   compositionTime: number,
   config: NormalizedMediaLayerConfig,
 ): number {
-  assertNonNegative(compositionTime, 'compositionTime');
+  assertNonNegativeNumber(compositionTime, 'compositionTime');
   const mediaTime = config.inPoint + compositionTime * config.playbackRate;
   if (config.outPoint === null) return mediaTime;
   return Math.min(mediaTime, config.outPoint);
@@ -165,9 +166,9 @@ function normalizeMediaLayerConfig(config: MediaLayerConfig): NormalizedMediaLay
   const outPoint = config.outPoint ?? null;
   const playbackRate = config.playbackRate ?? 1;
 
-  assertNonNegative(inPoint, 'inPoint');
-  if (outPoint !== null) assertNonNegative(outPoint, 'outPoint');
-  assertPositive(playbackRate, 'playbackRate');
+  assertNonNegativeNumber(inPoint, 'inPoint');
+  if (outPoint !== null) assertNonNegativeNumber(outPoint, 'outPoint');
+  assertPositiveNumber(playbackRate, 'playbackRate');
 
   if (outPoint !== null && outPoint <= inPoint) {
     throw validationError(
@@ -221,36 +222,6 @@ async function readAudioTrackMetadata(track: AudioTrackLike): Promise<AudioMetad
 
 async function loadMediabunnyRuntime(): Promise<MediabunnyRuntime> {
   return import('mediabunny') as Promise<MediabunnyRuntime>;
-}
-
-function assertNonNegative(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0) {
-    throw validationError(
-      'INVALID_NON_NEGATIVE_NUMBER',
-      `${propertyName} must be a non-negative number.`,
-      { propertyName, value },
-    );
-  }
-}
-
-function assertPositive(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw validationError(
-      'INVALID_POSITIVE_NUMBER',
-      `${propertyName} must be a positive number.`,
-      { propertyName, value },
-    );
-  }
-}
-
-function assertUnitRange(value: number, propertyName: string): void {
-  if (!Number.isFinite(value) || value < 0 || value > 1) {
-    throw validationError(
-      'INVALID_UNIT_RANGE',
-      `${propertyName} must be between 0 and 1.`,
-      { propertyName, value },
-    );
-  }
 }
 
 function finiteOrNull(value: number): number | null {

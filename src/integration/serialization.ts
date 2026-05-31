@@ -1,16 +1,21 @@
 import { validationError } from '../shared/errors';
 import type {
   Composition,
+  CompositionAsset,
   CompositionConfig,
-  EngineAdapters,
   Layer,
   LayerConfig,
+  LayerMaskConfig,
+  EnhancedTextLayerConfig,
+} from '../shared/project';
+import type { EngineAdapters } from '../shared/runtime';
+import type { ScrawlEffectConfig } from '../shared/scrawl';
+import type {
   SerializedAsset,
   SerializedComposition,
+  SerializedEnhancedTextLayerConfig,
   SerializedLayerConfig,
-  ScrawlEffectConfig,
-  LayerMaskConfig,
-} from '../shared/types';
+} from '../shared/serialization-types';
 
 type SerializedLayer = SerializedComposition['layers'][number];
 
@@ -58,7 +63,7 @@ export function serializeComposition(composition: Composition): string {
       time: composition.timeline.time(),
       duration: composition.timeline.duration(),
     },
-    assets: serializeAssets(composition.layers),
+    assets: composition.assets.map(serializeAsset),
   };
 
   return JSON.stringify(payload);
@@ -112,6 +117,7 @@ export function hydrateSerializedComposition(
     if (layerPayload.scrawlPacket !== undefined) adapters.importScrawlPacket?.(layerPayload.scrawlPacket);
   }
 
+  hydrateAssets(composition, payload.assets);
   composition.timeline.duration(payload.timeline.duration);
   composition.seek(payload.timeline.time);
 
@@ -129,6 +135,7 @@ function serializeLayerConfig(layer: Readonly<Layer>): SerializedLayerConfig {
   if (config.scrawl !== undefined) serialized.scrawl = config.scrawl;
   if (config.textMode !== undefined) serialized.textMode = config.textMode;
   if (config.text !== undefined) serialized.text = config.text;
+  if (config.enhancedText !== undefined) serialized.enhancedText = serializeEnhancedTextConfig(config.enhancedText);
   if (config.variant !== undefined) serialized.variant = config.variant;
   if (layer.effects.length > 0) serialized.effects = layer.effects.map(serializeEffectConfig);
   if (layer.mask !== null) serialized.mask = serializeMaskConfig(layer.mask);
@@ -155,20 +162,65 @@ function serializeMaskConfig(mask: Readonly<NonNullable<Layer['mask']>>): LayerM
   };
 }
 
-function serializeAssets(layers: ReadonlyArray<Layer>): SerializedAsset[] {
-  const assets: SerializedAsset[] = [];
+function serializeEnhancedTextConfig(config: Readonly<EnhancedTextLayerConfig>): SerializedEnhancedTextLayerConfig {
+  const serialized: Omit<SerializedEnhancedTextLayerConfig, 'layoutTemplate' | 'layoutTemplateLayerId'> & {
+    layoutTemplate?: string;
+    layoutTemplateLayerId?: string;
+  } = {
+    ...(config.fontString === undefined ? null : { fontString: config.fontString }),
+    ...(config.fillStyle === undefined ? null : { fillStyle: config.fillStyle }),
+    ...(config.strokeStyle === undefined ? null : { strokeStyle: config.strokeStyle }),
+    ...(config.lineWidth === undefined ? null : { lineWidth: config.lineWidth }),
+    ...(config.method === undefined ? null : { method: config.method }),
+    ...(config.useLayoutTemplateAsPath === undefined ? null : { useLayoutTemplateAsPath: config.useLayoutTemplateAsPath }),
+    ...(config.pathPosition === undefined ? null : { pathPosition: config.pathPosition }),
+    ...(config.alignment === undefined ? null : { alignment: config.alignment }),
+    ...(config.lineSpacing === undefined ? null : { lineSpacing: config.lineSpacing }),
+    ...(config.lineAdjustment === undefined ? null : { lineAdjustment: config.lineAdjustment }),
+    ...(config.breakTextOnSpaces === undefined ? null : { breakTextOnSpaces: config.breakTextOnSpaces }),
+    ...(config.breakWordsOnHyphens === undefined ? null : { breakWordsOnHyphens: config.breakWordsOnHyphens }),
+    ...(config.justifyLine === undefined ? null : { justifyLine: config.justifyLine }),
+    ...(config.textUnitFlow === undefined ? null : { textUnitFlow: config.textUnitFlow }),
+    ...(config.startTextOnLine === undefined ? null : { startTextOnLine: config.startTextOnLine }),
+  };
 
-  for (const layer of layers) {
-    if (layer.source === undefined) continue;
-    assets.push({
-      id: `${layer.id}:source`,
-      layerId: layer.id,
-      type: layer.type,
-      source: layer.source,
-    });
+  if (typeof config.layoutTemplate === 'string') {
+    serialized.layoutTemplate = config.layoutTemplate;
+  } else if (config.layoutTemplate !== undefined && isLayerReference(config.layoutTemplate)) {
+    serialized.layoutTemplateLayerId = config.layoutTemplate.id;
+  } else if (config.layoutTemplate !== undefined) {
+    serialized.layoutTemplate = config.layoutTemplate.name;
   }
 
-  return assets;
+  return serialized;
+}
+
+function serializeAsset(asset: Readonly<CompositionAsset>): SerializedAsset {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    sourceType: asset.sourceType,
+    ...(asset.ownerLayerId === undefined ? null : { ownerLayerId: asset.ownerLayerId }),
+    ...(asset.source === undefined ? null : { source: asset.source }),
+    ...(asset.label === undefined ? null : { label: asset.label }),
+  };
+}
+
+function hydrateAssets(composition: Composition, assets: readonly SerializedAsset[]): void {
+  for (const asset of [...composition.assets]) {
+    composition.removeAsset(asset);
+  }
+
+  for (const asset of assets) {
+    composition.registerAsset({
+      id: asset.id,
+      kind: asset.kind,
+      sourceType: asset.sourceType,
+      ...(asset.ownerLayerId === undefined ? null : { ownerLayerId: asset.ownerLayerId }),
+      ...(asset.source === undefined ? null : { source: asset.source }),
+      ...(asset.label === undefined ? null : { label: asset.label }),
+    });
+  }
 }
 
 function deserializeLayerConfig(
@@ -185,6 +237,7 @@ function deserializeLayerConfig(
 
   return {
     ...base,
+    ...(base.enhancedText === undefined ? null : { enhancedText: deserializeEnhancedTextConfig(base.enhancedText, layersById) }),
     name: layerPayload.name,
     transform: layerPayload.transform,
     visible: layerPayload.visible,
@@ -193,6 +246,27 @@ function deserializeLayerConfig(
     ...(layerPayload.content === undefined ? null : { content: layerPayload.content }),
     ...(parent === null || parent === undefined ? null : { parent }),
   };
+}
+
+function deserializeEnhancedTextConfig(
+  config: Readonly<SerializedEnhancedTextLayerConfig>,
+  layersById: ReadonlyMap<string, Layer>,
+): EnhancedTextLayerConfig {
+  const { layoutTemplateLayerId, ...rest } = config;
+  if (layoutTemplateLayerId === undefined) return rest;
+
+  const layoutTemplate = layersById.get(layoutTemplateLayerId);
+  if (layoutTemplate === undefined) {
+    throw validationError('SERIALIZED_TEXT_TEMPLATE_MISSING', 'Serialized enhanced text layout template must appear before the text layer.', {
+      value: layoutTemplateLayerId,
+    });
+  }
+
+  return { ...rest, layoutTemplate };
+}
+
+function isLayerReference(template: Exclude<EnhancedTextLayerConfig['layoutTemplate'], undefined>): template is Layer {
+  return typeof template === 'object' && template !== null && 'scrawlEntity' in template;
 }
 
 function assertSerializedComposition(value: unknown): asserts value is SerializedComposition {

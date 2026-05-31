@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createAnimationController } from '../animation';
 import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
 import { createComposition } from './composition';
 
@@ -73,6 +74,52 @@ describe('createComposition', () => {
     expect(composition.layers).not.toContain(child);
   });
 
+  test('tracks layer source assets and removes owned assets with the layer', () => {
+    const calls: string[] = [];
+    const composition = createComposition({ width: 100, height: 100 });
+    const image = composition.addImage('/plate.png', { name: 'plate' });
+    const video = composition.addVideo('/clip.mp4', { name: 'clip' });
+
+    composition.registerAsset({
+      id: `${video.id}:decoded-frame`,
+      kind: 'raw',
+      sourceType: 'generated',
+      ownerLayerId: video.id,
+      label: 'clip frame cache',
+      dispose() {
+        calls.push('dispose-frame');
+      },
+    });
+    composition.removeLayer(video);
+
+    expect(image.type).toBe('image');
+    expect(composition.assets).toEqual([
+      {
+        id: `${image.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: image.id,
+        source: '/plate.png',
+        label: 'plate',
+      },
+    ]);
+    expect(calls).toEqual(['dispose-frame']);
+  });
+
+  test('exposes high-level layer creation helpers', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const shape = composition.addShape({ name: 'box', shape: { kind: 'rectangle' } });
+    const text = composition.addText('Hello', { name: 'title' });
+    const audio = composition.addAudio('/voice.wav', { name: 'voice' });
+    const svg = composition.addSvg('/mark.svg', { name: 'mark' });
+
+    expect(shape.type).toBe('shape');
+    expect(text.config.text).toBe('Hello');
+    expect(audio.type).toBe('audio');
+    expect(svg.type).toBe('svg');
+    expect(composition.assets.map((asset) => asset.kind)).toEqual(['audio', 'svg']);
+  });
+
   test('maps child layers to Scrawl pivot and mimic state', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const parent = composition.addLayer('shape', {
@@ -110,10 +157,18 @@ describe('createComposition', () => {
     action.radius = 99;
     high[0] = 0;
 
-    expect(layer.effects).toEqual([
-      { id: 'effect-0', actions: [{ action: 'gaussian-blur', radius: 4 }], opacity: 0.5 },
-      { id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] },
-    ]);
+    expect(layer.effects[0]).toMatchObject({
+      id: 'effect-0',
+      actions: [{ action: 'gaussian-blur', radius: 4 }],
+      opacity: 0.5,
+      values: { radius: 4 },
+    });
+    expect(layer.effects[1]).toMatchObject({
+      id: 'edge',
+      actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
+      values: { level: 6 },
+    });
+    expect(typeof layer.effects[0]?.apply).toBe('function');
     expect(layer.mask).toEqual({ mode: 'destination-in', strategy: 'entity', opacity: 0.75, feather: 2, memoize: true });
   });
 
@@ -174,6 +229,121 @@ describe('createComposition', () => {
       'remove:mask-feather-3',
     ]);
     expect(composition.layers).toEqual([]);
+  });
+
+  test('creates an enhanced text motion target backed by the Scrawl entity', () => {
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          text: (context) => ({
+            name: context.name,
+            type: 'EnhancedLabel',
+            set(values) {
+              setCalls.push({ ...values });
+              return this;
+            },
+          }),
+        },
+      },
+    );
+    const controller = createAnimationController(composition);
+    const layer = composition.addLayer('text', {
+      text: 'path text',
+      enhancedText: {
+        pathPosition: 0,
+        alignment: 0,
+        lineSpacing: 1,
+        lineAdjustment: 0,
+        lineWidth: 1,
+        startTextOnLine: 0,
+      },
+    });
+
+    expect(layer.textState?.values.pathPosition).toBe(0);
+    controller.animateTarget(layer.textState!, { pathPosition: 1, lineSpacing: 1.5 }, { duration: 1 });
+    composition.seek(0.5);
+
+    expect(layer.textState?.values.pathPosition).toBe(0.5);
+    expect(layer.textState?.values.lineSpacing).toBe(1.25);
+    expect(setCalls.at(-1)).toMatchObject({ pathPosition: 0.5, lineSpacing: 1.25 });
+  });
+
+  test('creates video media state from Scrawl Picture video controls', () => {
+    const events: string[] = [];
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 4 },
+      {
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get(key) {
+              events.push(`get:${key}`);
+              return currentTime;
+            },
+            set(values) {
+              events.push(`set:${values['video_currentTime'] ?? 'none'}:${values['video_playbackRate'] ?? 'none'}`);
+              if (typeof values['video_currentTime'] === 'number') currentTime = values['video_currentTime'];
+              return this;
+            },
+            videoFastSeek(time) {
+              events.push(`fastSeek:${time}`);
+              currentTime = time;
+            },
+            videoPlay() {
+              events.push('play');
+              return Promise.resolve();
+            },
+            videoPause() {
+              events.push('pause');
+            },
+          }),
+        },
+      },
+    );
+
+    const layer = composition.addLayer('video', 'clip.mp4', {
+      video: { inPoint: 2, playbackRate: 1.5 },
+    });
+
+    composition.seek(1);
+    composition.play();
+    composition.pause();
+
+    expect(layer.media?.kind).toBe('video');
+    expect(layer.media?.getCurrentTime()).toBeCloseTo(1);
+    expect(events).toContain('set:3.5:1.5');
+    expect(events).toContain('fastSeek:3.5');
+    expect(events).toContain('play');
+    expect(events).toContain('pause');
+  });
+
+  test('disposes layer media when removing a layer', () => {
+    const events: string[] = [];
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('video', 'clip.mp4');
+    layer.media = {
+      kind: 'video',
+      name: 'clip',
+      getCurrentTime: () => 0,
+      seek() {
+        events.push('seek');
+      },
+      pause() {
+        events.push('pause');
+      },
+      dispose() {
+        events.push('dispose');
+      },
+    };
+
+    composition.removeLayer(layer);
+
+    expect(layer.media).toBeUndefined();
+    expect(events).toEqual(['pause', 'dispose']);
   });
 
   test('records layer-to-layer mask workflow without attaching unsafe entity clipping', () => {
@@ -280,6 +450,92 @@ describe('createComposition', () => {
       'render-cell',
       `add:${lateChildLayer.scrawlEntity.name}`,
     ]);
+  });
+
+  test('syncFrame updates timeline-backed state without media or render side effects', () => {
+    const events: string[] = [];
+    let mediaTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        createRenderer() {
+          return {
+            play() {},
+            pause() {},
+            renderFrame() {
+              events.push('render');
+            },
+          };
+        },
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get() {
+              return mediaTime;
+            },
+            set(values) {
+              if (typeof values['video_currentTime'] === 'number') {
+                mediaTime = values['video_currentTime'];
+                events.push(`media-set:${mediaTime}`);
+              }
+              return this;
+            },
+            videoFastSeek(time) {
+              events.push(`media-seek:${time}`);
+            },
+          }),
+        },
+      },
+    );
+    const layer = composition.addLayer('shape', {
+      transform: { position: { x: 12, y: 18 } },
+    });
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    layer.scrawlEntity.set = (values) => {
+      setCalls.push({ ...values });
+      return layer.scrawlEntity;
+    };
+    composition.addVideo('clip.mp4');
+
+    composition.syncFrame(1.5);
+
+    expect(composition.timeline.time()).toBe(1.5);
+    expect(setCalls.at(-1)?.['startX']).toBe(12);
+    expect(setCalls.at(-1)?.['startY']).toBe(18);
+    expect(events).toEqual([]);
+  });
+
+  test('seek uses the clamped composition time for media targets', () => {
+    const mediaSeeks: number[] = [];
+    let mediaTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get() {
+              return mediaTime;
+            },
+            set(values) {
+              if (typeof values['video_currentTime'] === 'number') mediaTime = values['video_currentTime'];
+              return this;
+            },
+            videoFastSeek(time) {
+              mediaSeeks.push(time);
+            },
+          }),
+        },
+      },
+    );
+    composition.addVideo('clip.mp4');
+
+    composition.seek(8);
+
+    expect(composition.timeline.time()).toBe(2);
+    expect(mediaSeeks).toEqual([2]);
   });
 
   test('installs a renderer frame callback for live playback sync', () => {

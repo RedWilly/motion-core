@@ -1,13 +1,8 @@
-import type { Composition, Layer, ScrawlEntityAdapter, ScrawlTransformState } from '../shared/types';
+import type { Composition, Layer } from '../shared/project';
+import type { MediaSyncTarget } from '../shared/runtime';
+import type { ScrawlEntityAdapter, ScrawlTransformState } from '../shared/scrawl';
 
-export interface MediaSyncTarget {
-  readonly kind: 'video' | 'audio';
-  readonly name: string;
-  getCurrentTime(): number;
-  seek(time: number): Promise<void>;
-  play?(): void | Promise<void>;
-  pause?(): void;
-}
+export type { MediaSyncTarget } from '../shared/runtime';
 
 export interface PreRenderHook {
   beforeRender(time: number): void | Promise<void>;
@@ -78,23 +73,20 @@ export async function syncToTimelineTime(
   time = composition.timeline.time(),
   options: SynchronizationOptions,
 ): Promise<void> {
-  composition.timeline.seek(time, true);
-
-  for (const layer of composition.layers) {
-    syncLayerToScrawl(layer);
-  }
+  composition.syncFrame(time, true);
+  const syncedTime = composition.timeline.time();
 
   for (const target of options.media ?? []) {
-    await target.seek(time);
-    const mediaTime = target.getCurrentTime();
-    const tolerance = 1 / options.frameRate;
-    if (Math.abs(mediaTime - time) > tolerance) {
-      options.onDesync?.({ target, timelineTime: time, mediaTime });
-    }
+    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
+  }
+
+  for (const layer of composition.layers) {
+    const target = layer.media;
+    if (target !== undefined) await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
   }
 
   for (const hook of options.hooks ?? []) {
-    await hook.beforeRender(time);
+    await hook.beforeRender(syncedTime);
   }
 
   await composition.renderer.renderFrame();
@@ -149,42 +141,53 @@ export class TimelineSynchronizer {
   }
 
   async seek(time: number, suppressEvents = true): Promise<void> {
-    this.composition.timeline.seek(time, suppressEvents);
-    this.syncLayers();
-    await this.seekMedia(this.composition.timeline.time());
-    await this.runHooks(this.composition.timeline.time());
+    this.composition.syncFrame(time, suppressEvents);
+    const syncedTime = this.composition.timeline.time();
+    await this.seekMedia(syncedTime);
+    await this.runHooks(syncedTime);
     await this.composition.renderer.renderFrame();
   }
 
   async syncFrame(): Promise<void> {
+    this.composition.syncFrame();
     const time = this.composition.timeline.time();
-    this.syncLayers();
     await this.seekMedia(time);
     await this.runHooks(time);
     await this.composition.renderer.renderFrame();
-  }
-
-  private syncLayers(): void {
-    for (const layer of this.composition.layers) syncLayerToScrawl(layer);
   }
 
   private async seekMedia(time: number): Promise<void> {
     const tolerance = 1 / this.frameRate;
 
     for (const target of this.media) {
-      const beforeSeekTime = target.getCurrentTime();
-      if (Math.abs(beforeSeekTime - time) <= tolerance) continue;
+      await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
+    }
 
-      await target.seek(time);
-      const mediaTime = target.getCurrentTime();
-      if (Math.abs(mediaTime - time) > tolerance) {
-        this.onDesync?.({ target, timelineTime: time, mediaTime });
-      }
+    for (const layer of this.composition.layers) {
+      const target = layer.media;
+      if (target !== undefined) await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
     }
   }
 
   private async runHooks(time: number): Promise<void> {
     for (const hook of this.hooks) await hook.beforeRender(time);
+  }
+}
+
+async function seekMediaTarget(
+  target: MediaSyncTarget,
+  time: number,
+  frameRate: number,
+  onDesync: SynchronizationOptions['onDesync'],
+  tolerance = 1 / frameRate,
+): Promise<void> {
+  const beforeSeekTime = target.getCurrentTime();
+  if (Math.abs(beforeSeekTime - time) <= tolerance) return;
+
+  await target.seek(time);
+  const mediaTime = target.getCurrentTime();
+  if (Math.abs(mediaTime - time) > tolerance) {
+    onDesync?.({ target, timelineTime: time, mediaTime });
   }
 }
 

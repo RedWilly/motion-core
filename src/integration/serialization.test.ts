@@ -80,7 +80,14 @@ describe('serialization', () => {
     expect(payload.layers[0]?.scrawlEntityName).toBe('box');
     expect(payload.layers[0]?.scrawlPacket).toContain('box');
     expect(payload.assets).toEqual([
-      { id: `${payload.layers[1]?.id}:source`, layerId: payload.layers[1]?.id, type: 'image', source: 'asset.png' },
+      {
+        id: `${payload.layers[1]?.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: payload.layers[1]?.id,
+        source: 'asset.png',
+        label: 'image',
+      },
     ]);
   });
 
@@ -104,6 +111,11 @@ describe('serialization', () => {
       parent,
       text: 'Hello',
       textMode: 'enhanced',
+      enhancedText: {
+        layoutTemplate: parent,
+        pathPosition: 0.25,
+        lineSpacing: 1.2,
+      },
       opacity: 0.5,
       effects: [{ id: 'edge', actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }] }],
       mask: { mode: 'clip', feather: 1 },
@@ -125,12 +137,17 @@ describe('serialization', () => {
     expect(hydrated.layers[1]?.parent).toBe(hydrated.layers[0]);
     expect(hydrated.layers[1]?.opacity).toBe(0.5);
     expect(hydrated.layers[1]?.config.text).toBe('Hello');
-    expect(hydrated.layers[1]?.effects).toEqual([
-      {
-        id: 'edge',
-        actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
-      },
-    ]);
+    expect(hydrated.layers[1]?.config.enhancedText).toMatchObject({
+      layoutTemplate: hydrated.layers[0],
+      pathPosition: 0.25,
+      lineSpacing: 1.2,
+    });
+    expect(hydrated.layers[1]?.effects[0]).toMatchObject({
+      id: 'edge',
+      actions: [{ action: 'threshold', level: 6, high: [255, 255, 255, 255] }],
+      values: { level: 6 },
+    });
+    expect(typeof hydrated.layers[1]?.effects[0]?.apply).toBe('function');
     expect(hydrated.layers[1]?.mask).toEqual({ mode: 'clip', strategy: 'entity', feather: 1 });
     expect(hydrated.timeline.time()).toBe(1);
     expect(packets).toHaveLength(2);
@@ -148,6 +165,37 @@ describe('serialization', () => {
 
     expect(hydrated.width).toBe(10);
     expect(hydrated.height).toBe(10);
+  });
+
+  test('hydrates serialized asset ownership without temporary layer ids', () => {
+    const original = createComposition({ width: 100, height: 100 });
+    const image = original.addImage('asset.png', { name: 'plate' });
+    original.registerAsset({
+      id: 'style:orb-gradient',
+      kind: 'style',
+      sourceType: 'generated',
+      label: 'orb-gradient',
+    });
+
+    const hydrated = deserializeComposition(serializeComposition(original));
+
+    expect(hydrated.layers[0]?.id).toBe(image.id);
+    expect(hydrated.assets).toEqual([
+      {
+        id: `${image.id}:source`,
+        kind: 'image',
+        sourceType: 'url',
+        ownerLayerId: image.id,
+        source: 'asset.png',
+        label: 'plate',
+      },
+      {
+        id: 'style:orb-gradient',
+        kind: 'style',
+        sourceType: 'generated',
+        label: 'orb-gradient',
+      },
+    ]);
   });
 
   test('serializes effects and layer mask relationships added through the core API', () => {

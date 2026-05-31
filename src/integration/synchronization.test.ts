@@ -154,6 +154,44 @@ describe('TimelineSynchronizer', () => {
     expect(order).toEqual(['media', 'hook:1', 'render']);
   });
 
+  test('syncs precomposition cells through the same frame path as composition seek', async () => {
+    const cellCalls: string[] = [];
+    const child = createComposition({ width: 50, height: 50, duration: 10 });
+    child.addShape({ name: 'child-shape' });
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 5 },
+      {
+        createPrecompositionCell(context) {
+          const cellGroup = {
+            name: `${context.layerName}-cell-group`,
+            moveArtefactsIntoGroup() {},
+            addArtefacts() {},
+          };
+          return {
+            name: `${context.layerName}-cell`,
+            getGroup() {
+              return cellGroup;
+            },
+            render() {
+              cellCalls.push(`render:${context.layerName}`);
+            },
+          };
+        },
+      },
+    );
+    composition.addPrecomposition(child, {
+      name: 'nested',
+      timeOffset: 0.5,
+      playbackRate: 2,
+    });
+    const sync = createTimelineSynchronizer(composition);
+
+    await sync.seek(2);
+
+    expect(child.timeline.time()).toBe(3);
+    expect(cellCalls).toEqual(['render:nested']);
+  });
+
   test('syncToTimelineTime also runs hooks before frame render', async () => {
     const order: string[] = [];
     const composition = createComposition(
@@ -181,5 +219,35 @@ describe('TimelineSynchronizer', () => {
     });
 
     expect(order).toEqual(['hook:0.5', 'render']);
+  });
+
+  test('syncToTimelineTime discovers video layer media state', async () => {
+    const events: string[] = [];
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, frameRate: 30 },
+      {
+        entityFactories: {
+          video: (context) => ({
+            name: context.name,
+            type: 'Picture',
+            get() {
+              return currentTime;
+            },
+            set(values) {
+              if (typeof values['video_currentTime'] === 'number') currentTime = values['video_currentTime'];
+              events.push(`set:${currentTime}`);
+              return this;
+            },
+          }),
+        },
+      },
+    );
+    composition.addLayer('video', 'clip.mp4', { video: { inPoint: 1, playbackRate: 2 } });
+
+    await syncToTimelineTime(composition, 0.5, { frameRate: 30 });
+
+    expect(currentTime).toBe(2);
+    expect(events).toContain('set:2');
   });
 });
