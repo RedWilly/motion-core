@@ -141,6 +141,7 @@ describe('createComposition', () => {
     );
     const first = composition.addLayer('shape', { name: 'first' });
     composition.addLayer('shape', { name: 'second' });
+    orders.length = 0;
 
     composition.reorderLayer(first, 1);
 

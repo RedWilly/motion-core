@@ -1,4 +1,5 @@
 import type { MotionStateTarget } from '../shared/runtime';
+import type { Layer } from '../shared/project';
 
 export class MotionTargetRegistry {
   private readonly targets: MotionStateTarget[] = [];
@@ -15,5 +16,9 @@ export class MotionTargetRegistry {
 
   apply(): void {
     for (const target of this.targets) target.apply();
+  }
+
+  removeLayer(layer: Layer): void {
+    for (const target of this.targets) target.removeLayer?.(layer);
   }
 }

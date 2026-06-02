@@ -10,6 +10,7 @@ import type {
 export interface MotionStateTarget<TValues extends Record<string, number> = Record<string, number>> {
   readonly values: TValues;
   apply(): void;
+  removeLayer?(layer: Layer): void;
 }
 
 export interface MediaSyncTarget {

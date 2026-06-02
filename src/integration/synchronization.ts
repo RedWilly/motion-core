@@ -61,6 +61,7 @@ export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
   state.handleY = transform.anchor.y;
   state.globalAlpha = layer.opacity;
   state.visibility = layer.visible;
+  state['order'] = layer.zIndex * 10;
 
   return state;
 }
@@ -68,6 +69,8 @@ export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
 export function syncLayerToScrawl(layer: Layer): void {
   const target: ScrawlEntityAdapter = layer.scrawlEntity;
   target.set(mapTransformToScrawl(layer));
+  target.parts?.fill?.set({ order: layer.zIndex * 10 });
+  target.parts?.stroke?.set({ order: layer.zIndex * 10 + 1 });
 }
 
 export class TimelineSynchronizer {

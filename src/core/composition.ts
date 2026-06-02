@@ -207,9 +207,7 @@ export function createComposition(
   const reindexLayers = (): void => {
     runtime.layers.forEach((item, nextIndex) => {
       item.zIndex = nextIndex;
-      layerArtefacts(item).forEach((artefact, partIndex) => {
-        artefact.set({ order: nextIndex * 10 + partIndex });
-      });
+      syncLayerToScrawl(item);
     });
   };
 
@@ -444,6 +442,7 @@ export function createComposition(
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       this.clearMask(layer);
+      motionTargets.removeLayer(layer);
       disposeLayerRuntime(layer);
 
       const index = this.layers.indexOf(layer);
