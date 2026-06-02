@@ -120,6 +120,33 @@ describe('createComposition', () => {
     expect(composition.assets.map((asset) => asset.kind)).toEqual(['audio', 'svg']);
   });
 
+  test('reorderLayer syncs Scrawl artefact order with composition order', () => {
+    const orders: string[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        createGroup: () => ({ name: 'group', addArtefacts() {}, removeArtefacts() {} }),
+        entityFactories: {
+          shape: (context) => ({
+            name: context.name,
+            type: 'shape',
+            set(values) {
+              if (typeof values['order'] === 'number') orders.push(`${context.name}:${values['order']}`);
+              return this;
+            },
+            kill() {},
+          }),
+        },
+      },
+    );
+    const first = composition.addLayer('shape', { name: 'first' });
+    composition.addLayer('shape', { name: 'second' });
+
+    composition.reorderLayer(first, 1);
+
+    expect(orders).toEqual(['second:0', 'first:10']);
+  });
+
   test('maps child layers to Scrawl pivot and mimic state', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const parent = composition.addLayer('shape', {

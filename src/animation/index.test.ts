@@ -175,6 +175,35 @@ describe('AnimationController', () => {
     expect(layer.transform.position.x).toBe(0);
   });
 
+  test('drops data-backed keyframes for layers removed from the composition', () => {
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          shape: (context) => ({
+            name: context.name,
+            type: 'shape',
+            set(values) {
+              setCalls.push({ ...values });
+              return this;
+            },
+            kill() {},
+          }),
+        },
+      },
+    );
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+    controller.addKeyframe(layer, 'position.x', 1, 100);
+
+    composition.removeLayer(layer);
+    setCalls.length = 0;
+    composition.seek(1);
+
+    expect(setCalls).toEqual([]);
+  });
+
   test('editKeyframe replaces an existing keyframe at the same time', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);

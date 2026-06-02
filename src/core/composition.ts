@@ -207,6 +207,9 @@ export function createComposition(
   const reindexLayers = (): void => {
     runtime.layers.forEach((item, nextIndex) => {
       item.zIndex = nextIndex;
+      layerArtefacts(item).forEach((artefact, partIndex) => {
+        artefact.set({ order: nextIndex * 10 + partIndex });
+      });
     });
   };
 

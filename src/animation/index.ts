@@ -221,8 +221,14 @@ export class AnimationController {
 
   apply(): void {
     const time = this.composition.timeline.time();
+    const activeLayers = new Set(this.composition.layers);
     const touchedLayers = new Set<Layer>();
     for (const [layer, layerKeyframes] of this.keyframes) {
+      if (!activeLayers.has(layer)) {
+        this.keyframes.delete(layer);
+        this.baselines.delete(layer);
+        continue;
+      }
       if (layer.locked) continue;
       for (const [property, keyframes] of layerKeyframes) {
         const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time, this.composition.timeline.parseEase);
