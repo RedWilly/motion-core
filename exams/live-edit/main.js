@@ -1,7 +1,8 @@
 import {
   blur,
+  createAnimationController,
   createComposition,
-  createEditorSession,
+  createLiveEditSession,
   createGsapTimelineFactory,
   loadBrowserScrawlAdapter,
 } from '../../dist/index.js';
@@ -56,7 +57,7 @@ async function main() {
     adapters,
   );
 
-  composition.addShape({
+  composition.addLayer('shape', {
     name: 'stage',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 380, y: 200 } },
     shape: {
@@ -85,7 +86,7 @@ async function main() {
     paletteEnd: 999,
   });
 
-  const shape = composition.addShape({
+  const shape = composition.addLayer('shape', {
     name: 'editable-wheel',
     transform: { position: { x: 260, y: 270 }, anchor: { x: 0, y: 0 } },
     opacity: 0.88,
@@ -100,7 +101,8 @@ async function main() {
     ],
   });
 
-  const label = composition.addText('edit me live', {
+  const label = composition.addLayer('text', {
+    text: 'edit me live',
     name: 'caption',
     transform: { position: { x: 480, y: 432 }, anchor: { x: 0, y: 0 } },
     scrawl: {
@@ -109,8 +111,8 @@ async function main() {
     },
   });
 
-  const editor = createEditorSession(composition);
-  const animation = editor.animation;
+  const editor = createLiveEditSession(composition);
+  const animation = createAnimationController(composition);
   const blurEffect = shape.effects[0];
   const fill = shape.shape?.fill;
   const stroke = shape.shape?.stroke;
@@ -132,7 +134,7 @@ async function main() {
 
   function bindLayerControl(input, property) {
     input.addEventListener('input', () => {
-      editor.editLayer(shape, property, numberInput(input), {
+      editor.setLayerProperty(shape, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -142,7 +144,7 @@ async function main() {
 
   function bindEffectControl(input, effect, key) {
     input.addEventListener('input', () => {
-      editor.editEffect(effect, key, numberInput(input), {
+      editor.setValue(effect.values, key, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -152,7 +154,8 @@ async function main() {
 
   function bindShapeFillControl(input, property) {
     input.addEventListener('input', () => {
-      editor.editShapeFill(shape, property, numberInput(input), {
+      if (shape.shape?.fill === undefined) return;
+      editor.setValue(shape.shape.fill.values, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -162,7 +165,8 @@ async function main() {
 
   function bindShapeStrokeControl(input, property) {
     input.addEventListener('input', () => {
-      editor.editShapeStroke(shape, property, numberInput(input), {
+      if (shape.shape?.stroke === undefined) return;
+      editor.setValue(shape.shape.stroke.values, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -211,11 +215,11 @@ async function main() {
 
   playToggle?.addEventListener('click', () => {
     if (playToggle.dataset.playing === 'true') {
-      editor.pause();
+      composition.pause();
       playToggle.dataset.playing = 'false';
       playToggle.textContent = 'Play';
     } else {
-      editor.play();
+      composition.play();
       playToggle.dataset.playing = 'true';
       playToggle.textContent = 'Pause';
     }
@@ -239,7 +243,7 @@ async function main() {
   }
 
   function seekTo(time) {
-    editor.seek(time);
+    composition.seek(time);
     syncControlsFromState();
     updateStatus();
   }
