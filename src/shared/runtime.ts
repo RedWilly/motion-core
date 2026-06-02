@@ -43,6 +43,7 @@ export interface TimelineAdapter {
   time(): number;
   duration(value?: number): number;
   eventCallback?(event: string, callback: (() => void) | null): void;
+  parseEase?(ease: string): ((progress: number) => number) | undefined;
   to?(
     target: object,
     vars: Readonly<Record<string, unknown>>,

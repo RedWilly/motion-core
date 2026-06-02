@@ -207,6 +207,34 @@ describe('AnimationController', () => {
     expect(layer.transform.position.x).toBe(200);
   });
 
+  test('uses timeline string easing parser for data-backed keyframes', () => {
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        createTimeline(duration) {
+          return {
+            play() {},
+            pause() {},
+            seek(time) {
+              currentTime = Math.min(Math.max(time, 0), duration);
+            },
+            time: () => currentTime,
+            duration: () => duration,
+            parseEase: (ease) => ease === 'quadratic' ? (progress) => progress * progress : undefined,
+          };
+        },
+      },
+    );
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+
+    controller.addKeyframe(layer, 'position.x', 2, 100, { easing: 'quadratic' });
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(25);
+  });
+
   test('evaluates expressions with time, frame, layer, and helper context', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 5, frameRate: 24 });
     const layer = composition.addLayer('shape', {

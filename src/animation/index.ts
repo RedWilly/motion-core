@@ -225,7 +225,7 @@ export class AnimationController {
     for (const [layer, layerKeyframes] of this.keyframes) {
       if (layer.locked) continue;
       for (const [property, keyframes] of layerKeyframes) {
-        const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time);
+        const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time, this.composition.timeline.parseEase);
         if (value === undefined) continue;
         writeBindingValue(bindLayerMotionProperty(layer, property), value);
         touchedLayers.add(layer);
@@ -566,18 +566,23 @@ function assertPositiveDuration(duration: number): void {
   }
 }
 
-function evaluateKeyframes(baseline: number, keyframes: readonly Keyframe[], time: number): number | undefined {
+function evaluateKeyframes(
+  baseline: number,
+  keyframes: readonly Keyframe[],
+  time: number,
+  parseEase?: (ease: string) => ((progress: number) => number) | undefined,
+): number | undefined {
   if (keyframes.length === 0) return undefined;
   const first = keyframes[0];
   if (first === undefined) return undefined;
-  if (time < first.time) return first.hold ? baseline : interpolateValue(baseline, first.value, time, 0, first.time, first.easing);
+  if (time < first.time) return first.hold ? baseline : interpolateValue(baseline, first.value, time, 0, first.time, first.easing, parseEase);
 
   let previousValue = baseline;
   let previousTime = 0;
   for (const keyframe of keyframes) {
     if (time < keyframe.time) {
       if (keyframe.hold) return previousValue;
-      return interpolateValue(previousValue, keyframe.value, time, previousTime, keyframe.time, keyframe.easing);
+      return interpolateValue(previousValue, keyframe.value, time, previousTime, keyframe.time, keyframe.easing, parseEase);
     }
     previousValue = keyframe.value;
     previousTime = keyframe.time;
@@ -585,10 +590,18 @@ function evaluateKeyframes(baseline: number, keyframes: readonly Keyframe[], tim
   return previousValue;
 }
 
-function interpolateValue(start: number, end: number, time: number, startTime: number, endTime: number, easing: Easing): number {
+function interpolateValue(
+  start: number,
+  end: number,
+  time: number,
+  startTime: number,
+  endTime: number,
+  easing: Easing,
+  parseEase?: (ease: string) => ((progress: number) => number) | undefined,
+): number {
   if (endTime <= startTime) return end;
   const progress = Math.min(Math.max((time - startTime) / (endTime - startTime), 0), 1);
-  const eased = typeof easing === 'function' ? easing(progress) : progress;
+  const eased = typeof easing === 'function' ? easing(progress) : (parseEase?.(easing)?.(progress) ?? progress);
   return start + (end - start) * eased;
 }
 

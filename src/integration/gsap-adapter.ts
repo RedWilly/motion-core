@@ -2,6 +2,7 @@ import type { TimelineAdapter, TimelineTweenAdapter } from '../shared/runtime';
 
 export interface GsapModule {
   timeline(vars?: Record<string, unknown>): GsapTimelineLike;
+  parseEase?(ease: string): ((progress: number) => number) | undefined;
 }
 
 export interface GsapTimelineLike {
@@ -38,6 +39,7 @@ export function createGsapTimelineFactory(gsap: GsapModule) {
       eventCallback: (event, callback) => {
         timeline.eventCallback?.(event, callback);
       },
+      parseEase: (ease) => gsap.parseEase?.(ease),
       to: (target, vars, position) => {
         timeline.to(target, vars, position);
         return timeline.recent();
