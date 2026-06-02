@@ -77,8 +77,8 @@ describe('createComposition', () => {
   test('tracks layer source assets and removes owned assets with the layer', () => {
     const calls: string[] = [];
     const composition = createComposition({ width: 100, height: 100 });
-    const image = composition.addImage('/plate.png', { name: 'plate' });
-    const video = composition.addVideo('/clip.mp4', { name: 'clip' });
+    const image = composition.addLayer('image', '/plate.png', { name: 'plate' });
+    const video = composition.addLayer('video', '/clip.mp4', { name: 'clip' });
 
     composition.registerAsset({
       id: `${video.id}:decoded-frame`,
@@ -106,12 +106,12 @@ describe('createComposition', () => {
     expect(calls).toEqual(['dispose-frame']);
   });
 
-  test('exposes high-level layer creation helpers', () => {
+  test('creates all layer variants through addLayer', () => {
     const composition = createComposition({ width: 100, height: 100 });
-    const shape = composition.addShape({ name: 'box', shape: { kind: 'rectangle' } });
-    const text = composition.addText('Hello', { name: 'title' });
-    const audio = composition.addAudio('/voice.wav', { name: 'voice' });
-    const svg = composition.addSvg('/mark.svg', { name: 'mark' });
+    const shape = composition.addLayer('shape', { name: 'box', shape: { kind: 'rectangle' } });
+    const text = composition.addLayer('text', { text: 'Hello', name: 'title' });
+    const audio = composition.addLayer('audio', '/voice.wav', { name: 'voice' });
+    const svg = composition.addLayer('svg', '/mark.svg', { name: 'mark' });
 
     expect(shape.type).toBe('shape');
     expect(text.config.text).toBe('Hello');
@@ -496,7 +496,7 @@ describe('createComposition', () => {
       setCalls.push({ ...values });
       return layer.scrawlEntity;
     };
-    composition.addVideo('clip.mp4');
+    composition.addLayer('video', 'clip.mp4');
 
     composition.syncFrame(1.5);
 
@@ -530,7 +530,7 @@ describe('createComposition', () => {
         },
       },
     );
-    composition.addVideo('clip.mp4');
+    composition.addLayer('video', 'clip.mp4');
 
     composition.seek(8);
 

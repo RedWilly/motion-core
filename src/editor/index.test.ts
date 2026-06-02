@@ -46,7 +46,7 @@ describe('LiveEditSession', () => {
         },
       },
     );
-    const layer = composition.addShape();
+    const layer = composition.addLayer('shape');
     const effect = composition.addEffect(layer, {
       id: 'blur',
       actions: [{ action: 'gaussian-blur', radius: 0 }],
@@ -125,7 +125,7 @@ describe('LiveEditSession', () => {
 
   test('binds layer motion properties through the same property map as animation', () => {
     const composition = createComposition({ width: 100, height: 100 });
-    const layer = composition.addShape({
+    const layer = composition.addLayer('shape', {
       transform: { position: { x: 4, y: 6 } },
     });
     const session = createLiveEditSession(composition, {
@@ -147,7 +147,7 @@ describe('LiveEditSession', () => {
   test('auto-key layer edits before writing the live value', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 4 });
     const animation = createAnimationController(composition);
-    const layer = composition.addShape({
+    const layer = composition.addLayer('shape', {
       transform: { position: { x: 0, y: 0 } },
     });
     const session = createLiveEditSession(composition, { render: false });
@@ -167,7 +167,7 @@ describe('LiveEditSession', () => {
   test('auto-key layer edits replace an existing keyframe at the same time', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 4 });
     const animation = createAnimationController(composition);
-    const layer = composition.addShape({
+    const layer = composition.addLayer('shape', {
       transform: { position: { x: 0, y: 0 } },
     });
     const session = createLiveEditSession(composition, { render: false });
@@ -191,7 +191,7 @@ describe('LiveEditSession', () => {
 
   test('auto-key value edits on generic motion targets through the timeline', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 4 });
-    const layer = composition.addShape();
+    const layer = composition.addLayer('shape');
     const effect = composition.addEffect(layer, {
       id: 'blur',
       actions: [{ action: 'gaussian-blur', radius: 0 }],
@@ -209,7 +209,7 @@ describe('LiveEditSession', () => {
   });
   test('edits effects and generic motion targets through the same value path', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 4 });
-    const layer = composition.addShape();
+    const layer = composition.addLayer('shape');
     const effect = composition.addEffect(layer, {
       id: 'blur',
       actions: [{ action: 'gaussian-blur', radius: 0 }],
@@ -243,7 +243,8 @@ describe('LiveEditSession', () => {
         },
       },
     );
-    const layer = composition.addText('Hello', {
+    const layer = composition.addLayer('text', {
+      text: 'Hello',
       textMode: 'enhanced',
       enhancedText: { lineSpacing: 1 },
     });

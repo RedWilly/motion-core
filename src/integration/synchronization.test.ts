@@ -157,7 +157,7 @@ describe('TimelineSynchronizer', () => {
   test('syncs precomposition cells through the same frame path as composition seek', async () => {
     const cellCalls: string[] = [];
     const child = createComposition({ width: 50, height: 50, duration: 10 });
-    child.addShape({ name: 'child-shape' });
+    child.addLayer('shape', { name: 'child-shape' });
     const composition = createComposition(
       { width: 100, height: 100, duration: 5 },
       {

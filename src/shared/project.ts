@@ -248,12 +248,6 @@ export interface Composition {
   renderer: RenderAdapter;
   addLayer(type: LayerType, config?: LayerConfig): Layer;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
-  addImage(source: string, config?: LayerConfig): Layer;
-  addVideo(source: string, config?: LayerConfig): Layer;
-  addAudio(source: string, config?: LayerConfig): Layer;
-  addSvg(source: string, config?: LayerConfig): Layer;
-  addShape(config?: LayerConfig): Layer;
-  addText(text: string, config?: LayerConfig): Layer;
   addPrecomposition(composition: Composition, config?: Omit<LayerConfig, 'content' | 'precomp'> & {
     readonly timeOffset?: number;
     readonly playbackRate?: number;

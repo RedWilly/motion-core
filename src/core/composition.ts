@@ -258,30 +258,6 @@ export function createComposition(
       return layer;
     },
 
-    addImage(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('image', source, layerConfig);
-    },
-
-    addVideo(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('video', source, layerConfig);
-    },
-
-    addAudio(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('audio', source, layerConfig);
-    },
-
-    addSvg(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('svg', source, layerConfig);
-    },
-
-    addShape(layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('shape', layerConfig);
-    },
-
-    addText(text: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('text', { ...layerConfig, text });
-    },
-
     addPrecomposition(
       childComposition: Composition,
       layerConfig: Omit<LayerConfig, 'content' | 'precomp'> & {
