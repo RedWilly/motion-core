@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createAnimationController } from '../animation';
-import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
+import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createComposition } from './composition';
 
 function createFakeEffectsAdapter(): { adapter: ScrawlEffectsAdapter; calls: string[] } {

@@ -1,7 +1,7 @@
 import { capabilityError, validationError } from '../shared/errors';
 import type { Composition } from '../shared/project';
 import type { FrameCaptureOptions } from '../shared/runtime';
-import { syncToTimelineTime } from '../integration/synchronization';
+import { createTimelineSynchronizer } from '../integration/synchronization';
 
 export type FrameExportFormat = 'png' | 'jpg' | 'jpeg' | 'webp';
 export type FrameExportOutputType = 'blob' | 'arraybuffer' | 'dataurl';
@@ -52,7 +52,7 @@ export async function exportFrame(
   validateExportTime(composition, time);
   const normalized = normalizeFrameExportConfig(config);
 
-  await syncToTimelineTime(composition, time, { frameRate: composition.frameRate });
+  await createTimelineSynchronizer(composition).seek(time);
   const blob = await captureFrameBlob(composition, normalized.capture);
 
   if (normalized.outputType === 'blob') return blob;
@@ -271,9 +271,10 @@ export function createMediabunnyVideoExportAdapter(
 
       try {
         await output.start();
+        const synchronizer = createTimelineSynchronizer(composition, { frameRate: config.frameRate });
         for (let frame = 0; frame < config.frameCount; frame += 1) {
           const time = frame * config.frameDuration;
-          await syncToTimelineTime(composition, time, { frameRate: config.frameRate });
+          await synchronizer.seek(time);
           await source.add(time, config.frameDuration);
           config.onProgress?.((frame + 1) / config.frameCount);
         }

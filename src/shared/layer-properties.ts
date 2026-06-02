@@ -1,4 +1,5 @@
 import type { Layer } from './project';
+import type { MotionStateTarget } from './runtime';
 
 export type LayerMotionProperty =
   | 'position.x'
@@ -34,6 +35,13 @@ export function bindLayerMotionProperty(layer: Layer, property: LayerMotionPrope
     case 'opacity':
       return { target: layer as unknown as Record<string, number>, key: 'opacity' };
   }
+}
+
+export function bindMotionTargetProperty<TValues extends Record<string, number>>(
+  target: MotionStateTarget<TValues>,
+  key: keyof TValues & string,
+): NumericPropertyBinding {
+  return { target: target.values, key };
 }
 
 export function readNumericBinding(binding: NumericPropertyBinding): number {

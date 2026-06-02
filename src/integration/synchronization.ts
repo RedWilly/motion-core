@@ -8,17 +8,19 @@ export interface PreRenderHook {
   beforeRender(time: number): void | Promise<void>;
 }
 
-export interface SynchronizationOptions {
-  frameRate: number;
-  media?: MediaSyncTarget[];
-  hooks?: PreRenderHook[];
-  onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
-}
-
 export interface TimelineSynchronizerConfig {
   frameRate?: number;
   hooks?: PreRenderHook[];
   onDesync?: (details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void;
+}
+
+interface SynchronizedFrameOptions {
+  readonly time?: number;
+  readonly suppressEvents: boolean;
+  readonly frameRate: number;
+  readonly media: readonly MediaSyncTarget[];
+  readonly hooks: readonly PreRenderHook[];
+  readonly onDesync?: TimelineSynchronizerConfig['onDesync'];
 }
 
 export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
@@ -66,30 +68,6 @@ export function mapTransformToScrawl(layer: Layer): ScrawlTransformState {
 export function syncLayerToScrawl(layer: Layer): void {
   const target: ScrawlEntityAdapter = layer.scrawlEntity;
   target.set(mapTransformToScrawl(layer));
-}
-
-export async function syncToTimelineTime(
-  composition: Composition,
-  time = composition.timeline.time(),
-  options: SynchronizationOptions,
-): Promise<void> {
-  composition.syncFrame(time, true);
-  const syncedTime = composition.timeline.time();
-
-  for (const target of options.media ?? []) {
-    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
-  }
-
-  for (const layer of composition.layers) {
-    const target = layer.media;
-    if (target !== undefined) await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync);
-  }
-
-  for (const hook of options.hooks ?? []) {
-    await hook.beforeRender(syncedTime);
-  }
-
-  await composition.renderer.renderFrame();
 }
 
 export class TimelineSynchronizer {
@@ -141,44 +119,54 @@ export class TimelineSynchronizer {
   }
 
   async seek(time: number, suppressEvents = true): Promise<void> {
-    this.composition.syncFrame(time, suppressEvents);
-    const syncedTime = this.composition.timeline.time();
-    await this.seekMedia(syncedTime);
-    await this.runHooks(syncedTime);
-    await this.composition.renderer.renderFrame();
+    await synchronizeFrame(this.composition, {
+      time,
+      suppressEvents,
+      frameRate: this.frameRate,
+      media: this.media,
+      hooks: this.hooks,
+      onDesync: this.onDesync,
+    });
   }
 
   async syncFrame(): Promise<void> {
-    this.composition.syncFrame();
-    const time = this.composition.timeline.time();
-    await this.seekMedia(time);
-    await this.runHooks(time);
-    await this.composition.renderer.renderFrame();
+    await synchronizeFrame(this.composition, {
+      suppressEvents: true,
+      frameRate: this.frameRate,
+      media: this.media,
+      hooks: this.hooks,
+      onDesync: this.onDesync,
+    });
+  }
+}
+
+async function synchronizeFrame(
+  composition: Composition,
+  options: SynchronizedFrameOptions,
+): Promise<void> {
+  composition.syncFrame(options.time ?? composition.timeline.time(), options.suppressEvents);
+  const syncedTime = composition.timeline.time();
+  const tolerance = 1 / options.frameRate;
+
+  for (const target of options.media) {
+    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync, tolerance);
   }
 
-  private async seekMedia(time: number): Promise<void> {
-    const tolerance = 1 / this.frameRate;
-
-    for (const target of this.media) {
-      await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
-    }
-
-    for (const layer of this.composition.layers) {
-      const target = layer.media;
-      if (target !== undefined) await seekMediaTarget(target, time, this.frameRate, this.onDesync, tolerance);
-    }
+  for (const layer of composition.layers) {
+    const target = layer.media;
+    if (target !== undefined) await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync, tolerance);
   }
 
-  private async runHooks(time: number): Promise<void> {
-    for (const hook of this.hooks) await hook.beforeRender(time);
-  }
+  for (const hook of options.hooks) await hook.beforeRender(syncedTime);
+
+  await composition.renderer.renderFrame();
 }
 
 async function seekMediaTarget(
   target: MediaSyncTarget,
   time: number,
   frameRate: number,
-  onDesync: SynchronizationOptions['onDesync'],
+  onDesync: TimelineSynchronizerConfig['onDesync'],
   tolerance = 1 / frameRate,
 ): Promise<void> {
   const beforeSeekTime = target.getCurrentTime();

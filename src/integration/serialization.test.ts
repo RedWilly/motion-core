@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition, deserializeComposition } from '../core';
-import type { LayerEntityFactoryContext, ScrawlEntityAdapter } from '../shared/types';
+import type { LayerEntityFactoryContext, ScrawlEntityAdapter } from '../shared';
 import {
   hydrateSerializedComposition,
   parseSerializedComposition,

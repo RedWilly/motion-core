@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
-import { syncToTimelineTime } from '../integration/synchronization';
-import type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
+import { createTimelineSynchronizer } from '../integration/synchronization';
+import type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createAnimationController, createExpressionRenderHook } from './index';
 
 function createObservedLayer() {
@@ -275,10 +275,7 @@ describe('AnimationController', () => {
     const hook = createExpressionRenderHook(controller);
 
     controller.setExpression(layer, 'position.x', 'time * 10');
-    await syncToTimelineTime(composition, 2, {
-      frameRate: composition.frameRate,
-      hooks: [hook],
-    });
+    await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(2);
 
     expect(layer.transform.position.x).toBe(20);
     expect(setCalls.at(-1)?.['startX']).toBe(20);
@@ -293,10 +290,7 @@ describe('AnimationController', () => {
     }));
 
     controller.setExpression(layer, 'opacity', 'audio.amplitude + audio.bands.bass');
-    await syncToTimelineTime(composition, 0, {
-      frameRate: composition.frameRate,
-      hooks: [hook],
-    });
+    await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(0);
 
     expect(layer.opacity).toBe(0.75);
   });

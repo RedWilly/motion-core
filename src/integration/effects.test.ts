@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { EngineError } from '../shared/errors';
-import type { ScrawlEntityAdapter, ScrawlFilterAdapter } from '../shared/types';
+import type { ScrawlEntityAdapter, ScrawlFilterAdapter } from '../shared';
 import { createScrawlEffectsController } from './effects';
 import type { ScrawlFactoryModule } from './scrawl-factories';
 

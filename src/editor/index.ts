@@ -1,17 +1,5 @@
-import { createAnimationController, type AnimationController, type KeyframeConfig } from '../animation';
-import { validationError } from '../shared/errors';
-import type {
-  Composition,
-  Layer,
-  LayerEffectState,
-  LayerMaskConfig,
-  LayerMaskState,
-  MotionStateTarget,
-  ShapeFillState,
-  ShapeStrokeState,
-  TextLayerMotionValues,
-  TextLayerState,
-} from '../shared';
+import type { AnimationController, KeyframeConfig } from '../animation';
+import type { Composition, Layer } from '../shared';
 import {
   bindLayerMotionProperty,
   writeNumericBinding,
@@ -79,93 +67,6 @@ export interface LiveEditSession {
     value: number,
     options?: LiveEditOptions & { readonly render?: boolean },
   ): void;
-  flush(): void;
-  dispose(): void;
-}
-
-export type EditorLayerProperty = LayerMotionProperty;
-export type EditorShapeFillProperty = keyof ShapeFillState['values'] & string;
-export type EditorShapeStrokeProperty = keyof ShapeStrokeState['values'] & string;
-export type EditorTextProperty = keyof TextLayerMotionValues & string;
-
-export type EditorEditOptions = Omit<LiveEditOptions, 'animation'> & {
-  readonly render?: boolean;
-};
-
-export type EditorBindingOptions = Omit<LiveEditBindingOptions, 'edit'> & {
-  readonly edit?: EditorEditOptions;
-};
-
-export interface EditorSessionOptions extends LiveEditSessionOptions {
-  readonly animation?: AnimationController;
-}
-
-export interface EditorSession {
-  readonly animation: AnimationController;
-  readonly live: LiveEditSession;
-  bindLayerInput(
-    input: LiveEditInput,
-    layer: Layer,
-    property: EditorLayerProperty,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editLayer(layer: Layer, property: EditorLayerProperty, value: number, options?: EditorEditOptions): void;
-  bindEffectInput<TKey extends keyof LayerEffectState['values'] & string>(
-    input: LiveEditInput,
-    effect: LayerEffectState,
-    key: TKey,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editEffect<TKey extends keyof LayerEffectState['values'] & string>(
-    effect: LayerEffectState,
-    key: TKey,
-    value: number,
-    options?: EditorEditOptions,
-  ): void;
-  bindShapeFillInput(
-    input: LiveEditInput,
-    layer: Layer,
-    property: EditorShapeFillProperty,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editShapeFill(layer: Layer, property: EditorShapeFillProperty, value: number, options?: EditorEditOptions): void;
-  bindShapeStrokeInput(
-    input: LiveEditInput,
-    layer: Layer,
-    property: EditorShapeStrokeProperty,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editShapeStroke(layer: Layer, property: EditorShapeStrokeProperty, value: number, options?: EditorEditOptions): void;
-  bindTextInput(
-    input: LiveEditInput,
-    layer: Layer,
-    property: EditorTextProperty,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editText(layer: Layer, property: EditorTextProperty, value: number, options?: EditorEditOptions): void;
-  bindTargetInput<TValues extends Record<string, number>, TKey extends keyof TValues & string>(
-    input: LiveEditInput,
-    target: MotionStateTarget<TValues>,
-    key: TKey,
-    options?: EditorBindingOptions,
-  ): () => void;
-  editTarget<TValues extends Record<string, number>, TKey extends keyof TValues & string>(
-    target: MotionStateTarget<TValues>,
-    key: TKey,
-    value: number,
-    options?: EditorEditOptions,
-  ): void;
-  setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState;
-  setLayerMask(
-    targetLayer: Layer,
-    sourceLayer: Layer,
-    config?: Omit<LayerMaskConfig, 'sourceLayerId'>,
-  ): LayerMaskState;
-  clearMask(layer: Layer): void;
-  play(): void;
-  pause(): void;
-  seek(time: number): void;
-  syncFrame(time?: number): void;
   flush(): void;
   dispose(): void;
 }
@@ -300,111 +201,6 @@ export function createLiveEditSession(
   return session;
 }
 
-export function createEditorSession(
-  composition: Composition,
-  options: EditorSessionOptions = {},
-): EditorSession {
-  const animation = options.animation ?? createAnimationController(composition);
-  const live = createLiveEditSession(composition, options);
-
-  const editLayerOptions = (edit?: EditorEditOptions): LiveEditOptions & { readonly render?: boolean } => ({
-    ...edit,
-    animation,
-  });
-
-  return {
-    animation,
-    live,
-
-    bindLayerInput(input, layer, property, options = {}) {
-      return live.bindLayerInput(input, layer, property, {
-        ...options,
-        edit: editLayerOptions(options.edit),
-      });
-    },
-
-    editLayer(layer, property, value, options = {}) {
-      live.setLayerProperty(layer, property, value, editLayerOptions(options));
-    },
-
-    bindEffectInput(input, effect, key, options = {}) {
-      return live.bindInput(input, effect.values, key, options);
-    },
-
-    editEffect(effect, key, value, options = {}) {
-      live.setValue(effect.values, key, value, options);
-    },
-
-    bindShapeFillInput(input, layer, property, options = {}) {
-      return live.bindInput(input, requireShape(layer).fill.values, property, options);
-    },
-
-    editShapeFill(layer, property, value, options = {}) {
-      live.setValue(requireShape(layer).fill.values, property, value, options);
-    },
-
-    bindShapeStrokeInput(input, layer, property, options = {}) {
-      return live.bindInput(input, requireShape(layer).stroke.values, property, options);
-    },
-
-    editShapeStroke(layer, property, value, options = {}) {
-      live.setValue(requireShape(layer).stroke.values, property, value, options);
-    },
-
-    bindTextInput(input, layer, property, options = {}) {
-      return live.bindInput(input, requireText(layer).values, property, options);
-    },
-
-    editText(layer, property, value, options = {}) {
-      live.setValue(requireText(layer).values, property, value, options);
-    },
-
-    bindTargetInput(input, target, key, options = {}) {
-      return live.bindInput(input, target.values, key, options);
-    },
-
-    editTarget(target, key, value, options = {}) {
-      live.setValue(target.values, key, value, options);
-    },
-
-    setMask(layer, config) {
-      return composition.setMask(layer, config);
-    },
-
-    setLayerMask(targetLayer, sourceLayer, config) {
-      return composition.setLayerMask(targetLayer, sourceLayer, config);
-    },
-
-    clearMask(layer) {
-      composition.clearMask(layer);
-    },
-
-    play() {
-      composition.play();
-    },
-
-    pause() {
-      composition.pause();
-    },
-
-    seek(time) {
-      composition.seek(time);
-    },
-
-    syncFrame(time) {
-      composition.syncFrame(time);
-    },
-
-    flush() {
-      live.flush();
-    },
-
-    dispose() {
-      live.dispose();
-    },
-  };
-}
-
 function normalizeEvents(event: LiveEditBindingOptions['event']): readonly string[] {
   if (event === undefined) return defaultEvents;
   return typeof event === 'string' ? [event] : event;
@@ -451,20 +247,4 @@ function removeBinding(bindings: LiveEditBinding[], binding: LiveEditBinding): v
 
 function noop(): void {
   return undefined;
-}
-
-function requireShape(layer: Layer): NonNullable<Layer['shape']> {
-  if (layer.shape !== undefined) return layer.shape;
-  throw validationError('LAYER_SHAPE_STATE_UNAVAILABLE', 'Layer does not expose editable shape state.', {
-    layerName: layer.name,
-    propertyName: 'shape',
-  });
-}
-
-function requireText(layer: Layer): TextLayerState {
-  if (layer.textState !== undefined) return layer.textState;
-  throw validationError('LAYER_TEXT_STATE_UNAVAILABLE', 'Layer does not expose editable text state.', {
-    layerName: layer.name,
-    propertyName: 'textState',
-  });
 }

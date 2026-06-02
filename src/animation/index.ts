@@ -4,6 +4,7 @@ import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime'
 import { createId } from '../shared/ids';
 import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 import {
+  bindMotionTargetProperty,
   bindLayerMotionProperty,
   readNumericBinding,
   writeNumericBinding,
@@ -90,6 +91,21 @@ export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
 
 type PropertyBinding = NumericPropertyBinding;
 
+interface TweenRequest {
+  readonly binding: PropertyBinding;
+  readonly value: number;
+}
+
+interface TweenOptions {
+  duration: number;
+  ease: Easing;
+  hold?: boolean;
+  repeat?: number;
+  yoyo?: boolean;
+  onComplete?: () => void;
+  position: number;
+}
+
 interface CompiledExpression extends Expression {
   evaluate: (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
   lastValidValue: number;
@@ -171,37 +187,14 @@ export class AnimationController {
 
   animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation {
     this.assertLayerCanAnimate(layer);
-    assertPositiveDuration(config.duration);
-
-    const tweens: TimelineTweenAdapter[] = [];
-    const position = this.composition.timeline.time() + (config.delay ?? 0);
-
+    const requests: TweenRequest[] = [];
     for (const property of Object.keys(values) as AnimatableProperty[]) {
       const value = values[property];
       if (value === undefined) continue;
-
-      const binding = bindLayerMotionProperty(layer, property);
-      const options: {
-        duration: number;
-        ease: Easing;
-        repeat?: number;
-        yoyo?: boolean;
-        onComplete?: () => void;
-        position: number;
-      } = {
-        duration: config.duration,
-        ease: config.easing ?? defaultEase,
-        position,
-      };
-
-      if (config.repeat !== undefined) options.repeat = config.repeat;
-      if (config.yoyo !== undefined) options.yoyo = config.yoyo;
-      if (config.onComplete !== undefined) options.onComplete = config.onComplete;
-
-      tweens.push(this.createTween(binding, value, options));
+      requests.push({ binding: bindLayerMotionProperty(layer, property), value });
     }
 
-    return createAnimation(createId('animation'), tweens);
+    return this.animateBindings(requests, config);
   }
 
   animateTarget<TValues extends Record<string, number>>(
@@ -209,38 +202,17 @@ export class AnimationController {
     values: MotionTargetValues<TValues>,
     config: AnimationConfig,
   ): Animation {
-    assertPositiveDuration(config.duration);
     this.composition.registerMotionTarget(target);
-
-    const tweens: TimelineTweenAdapter[] = [];
-    const position = this.composition.timeline.time() + (config.delay ?? 0);
+    const requests: TweenRequest[] = [];
     const keys = Object.keys(values) as Array<keyof TValues & string>;
 
     for (const key of keys) {
       const value = values[key];
       if (value === undefined) continue;
-
-      const options: {
-        duration: number;
-        ease: Easing;
-        repeat?: number;
-        yoyo?: boolean;
-        onComplete?: () => void;
-        position: number;
-      } = {
-        duration: config.duration,
-        ease: config.easing ?? defaultEase,
-        position,
-      };
-
-      if (config.repeat !== undefined) options.repeat = config.repeat;
-      if (config.yoyo !== undefined) options.yoyo = config.yoyo;
-      if (config.onComplete !== undefined) options.onComplete = config.onComplete;
-
-      tweens.push(this.createTween({ target: target.values, key }, value, options));
+      requests.push({ binding: bindMotionTargetProperty(target, key), value });
     }
 
-    return createAnimation(createId('animation'), tweens);
+    return this.animateBindings(requests, config);
   }
 
   removeAnimationsForLayer(layer: Layer): void {
@@ -344,15 +316,7 @@ export class AnimationController {
   private createTween(
     binding: PropertyBinding,
     value: number,
-    options: {
-      duration: number;
-      ease: Easing;
-      hold?: boolean;
-      repeat?: number;
-      yoyo?: boolean;
-      onComplete?: () => void;
-      position: number;
-    },
+    options: TweenOptions,
   ): TimelineTweenAdapter {
     const vars: Record<string, unknown> = {
       [binding.key]: value,
@@ -379,6 +343,19 @@ export class AnimationController {
     }
 
     return tween;
+  }
+
+  private animateBindings(requests: readonly TweenRequest[], config: AnimationConfig): Animation {
+    assertPositiveDuration(config.duration);
+
+    const tweens: TimelineTweenAdapter[] = [];
+    const position = this.composition.timeline.time() + (config.delay ?? 0);
+
+    for (const request of requests) {
+      tweens.push(this.createTween(request.binding, request.value, createTweenOptions(config, position)));
+    }
+
+    return createAnimation(createId('animation'), tweens);
   }
 
   private assertLayerCanAnimate(layer: Layer): void {
@@ -545,6 +522,20 @@ function createAnimation(id: string, tweens: TimelineTweenAdapter[]): Animation 
       for (const tween of tweens) tween.kill();
     },
   };
+}
+
+function createTweenOptions(config: AnimationConfig, position: number): TweenOptions {
+  const options: TweenOptions = {
+    duration: config.duration,
+    ease: config.easing ?? defaultEase,
+    position,
+  };
+
+  if (config.repeat !== undefined) options.repeat = config.repeat;
+  if (config.yoyo !== undefined) options.yoyo = config.yoyo;
+  if (config.onComplete !== undefined) options.onComplete = config.onComplete;
+
+  return options;
 }
 
 function assertPositiveDuration(duration: number): void {

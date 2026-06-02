@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
-import { createTimelineSynchronizer, syncToTimelineTime, type MediaSyncTarget } from './synchronization';
+import { createTimelineSynchronizer, type MediaSyncTarget } from './synchronization';
 
 function createMediaTarget(name: string, seekOffset = 0) {
   const events: string[] = [];
@@ -192,62 +192,4 @@ describe('TimelineSynchronizer', () => {
     expect(cellCalls).toEqual(['render:nested']);
   });
 
-  test('syncToTimelineTime also runs hooks before frame render', async () => {
-    const order: string[] = [];
-    const composition = createComposition(
-      { width: 100, height: 100, frameRate: 30 },
-      {
-        createRenderer() {
-          return {
-            play() {},
-            pause() {},
-            renderFrame() {
-              order.push('render');
-            },
-          };
-        },
-      },
-    );
-
-    await syncToTimelineTime(composition, 0.5, {
-      frameRate: 30,
-      hooks: [{
-        beforeRender(time) {
-          order.push(`hook:${time}`);
-        },
-      }],
-    });
-
-    expect(order).toEqual(['hook:0.5', 'render']);
-  });
-
-  test('syncToTimelineTime discovers video layer media state', async () => {
-    const events: string[] = [];
-    let currentTime = 0;
-    const composition = createComposition(
-      { width: 100, height: 100, frameRate: 30 },
-      {
-        entityFactories: {
-          video: (context) => ({
-            name: context.name,
-            type: 'Picture',
-            get() {
-              return currentTime;
-            },
-            set(values) {
-              if (typeof values['video_currentTime'] === 'number') currentTime = values['video_currentTime'];
-              events.push(`set:${currentTime}`);
-              return this;
-            },
-          }),
-        },
-      },
-    );
-    composition.addLayer('video', 'clip.mp4', { video: { inPoint: 1, playbackRate: 2 } });
-
-    await syncToTimelineTime(composition, 0.5, { frameRate: 30 });
-
-    expect(currentTime).toBe(2);
-    expect(events).toContain('set:2');
-  });
 });
