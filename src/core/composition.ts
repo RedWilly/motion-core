@@ -160,6 +160,56 @@ export function createComposition(
     startedAtMs: 0,
   };
 
+  const registerLayerRuntime = (layer: Layer): void => {
+    layer.parent?.children.push(layer);
+    runtime.layers.push(layer);
+    assets.registerLayerSource(layer);
+    registry.register(layer, layer.scrawlEntity);
+    activeGroup?.addArtefacts?.(...layerArtefacts(layer));
+    syncLayerToScrawl(layer);
+    if (layer.shape !== undefined) {
+      layer.shape.apply();
+      motionTargets.register(layer.shape.fill);
+      motionTargets.register(layer.shape.stroke);
+    }
+    if (layer.textState !== undefined) {
+      layer.textState.apply();
+      motionTargets.register(layer.textState);
+    }
+    for (const effect of layer.effects) {
+      attachLayerEffect(effectsController, layer, effect);
+      configureLayerEffectMotionTarget(effectsController, effect);
+      motionTargets.register(effect);
+    }
+    applyLayerMask(effectsController, layer, layer.mask);
+  };
+
+  const disposeLayerRuntime = (layer: Layer): void => {
+    for (const effect of layer.effects) {
+      detachLayerEffect(effectsController, layer, effect);
+      motionTargets.remove(effect);
+    }
+    if (layer.shape !== undefined) {
+      motionTargets.remove(layer.shape.fill);
+      motionTargets.remove(layer.shape.stroke);
+    }
+    if (layer.textState !== undefined) motionTargets.remove(layer.textState);
+    layer.media?.pause?.();
+    layer.media?.dispose?.();
+    delete layer.media;
+    assets.removeOwnedByLayer(layer);
+    activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
+    layer.scrawlEntity.kill?.();
+    precompositionTimes.delete(layer);
+    registry.unregister(layer);
+  };
+
+  const reindexLayers = (): void => {
+    runtime.layers.forEach((item, nextIndex) => {
+      item.zIndex = nextIndex;
+    });
+  };
+
   const composition = {
     id,
     name: normalized.name,
@@ -233,27 +283,7 @@ export function createComposition(
             ? { ...baseLayer, source }
             : { ...baseLayer, source, content: layerConfig.content };
 
-      parent?.children.push(layer);
-      this.layers.push(layer);
-      assets.registerLayerSource(layer);
-      registry.register(layer, entity);
-      activeGroup?.addArtefacts?.(...layerArtefacts(layer));
-      syncLayerToScrawl(layer);
-      if (layer.shape !== undefined) {
-        layer.shape.apply();
-        motionTargets.register(layer.shape.fill);
-        motionTargets.register(layer.shape.stroke);
-      }
-      if (layer.textState !== undefined) {
-        layer.textState.apply();
-        motionTargets.register(layer.textState);
-      }
-      for (const effect of layer.effects) {
-        attachLayerEffect(effectsController, layer, effect);
-        configureLayerEffectMotionTarget(effectsController, effect);
-        motionTargets.register(effect);
-      }
-      applyLayerMask(effectsController, layer, layer.mask);
+      registerLayerRuntime(layer);
 
       return layer;
     },
@@ -411,30 +441,11 @@ export function createComposition(
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       this.clearMask(layer);
-      detachMaskFeather(effectsController, layer);
-      for (const effect of layer.effects) {
-        detachLayerEffect(effectsController, layer, effect);
-        motionTargets.remove(effect);
-      }
-      if (layer.shape !== undefined) {
-        motionTargets.remove(layer.shape.fill);
-        motionTargets.remove(layer.shape.stroke);
-      }
-      if (layer.textState !== undefined) motionTargets.remove(layer.textState);
-      layer.media?.pause?.();
-      layer.media?.dispose?.();
-      delete layer.media;
-      assets.removeOwnedByLayer(layer);
-      activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
-      layer.scrawlEntity.kill?.();
-      precompositionTimes.delete(layer);
-      registry.unregister(layer);
+      disposeLayerRuntime(layer);
 
       const index = this.layers.indexOf(layer);
       if (index >= 0) this.layers.splice(index, 1);
-      this.layers.forEach((item, nextIndex) => {
-        item.zIndex = nextIndex;
-      });
+      reindexLayers();
     },
 
     reorderLayer(layer: Layer, newIndex: number): void {
@@ -444,9 +455,7 @@ export function createComposition(
       const boundedIndex = Math.min(Math.max(newIndex, 0), this.layers.length - 1);
       this.layers.splice(currentIndex, 1);
       this.layers.splice(boundedIndex, 0, layer);
-      this.layers.forEach((item, index) => {
-        item.zIndex = index;
-      });
+      reindexLayers();
     },
 
     play(): void {
