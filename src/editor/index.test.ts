@@ -144,6 +144,23 @@ describe('LiveEditSession', () => {
     expect(layer.scrawlState.startX).toBe(42);
   });
 
+  test('synchronous schedulers do not leave later edits unsynced', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('shape');
+    const session = createLiveEditSession(composition, {
+      schedule(callback) {
+        callback();
+        return () => undefined;
+      },
+      render: false,
+    });
+
+    session.setLayerProperty(layer, 'position.x', 20);
+    session.setLayerProperty(layer, 'position.x', 40);
+
+    expect(layer.scrawlState.startX).toBe(40);
+  });
+
   test('auto-key layer edits before writing the live value', () => {
     const composition = createComposition({ width: 100, height: 100, duration: 4 });
     const animation = createAnimationController(composition);

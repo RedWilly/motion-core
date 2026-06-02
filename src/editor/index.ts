@@ -85,18 +85,22 @@ export function createLiveEditSession(
   const defaultRender = options.render ?? true;
   const bindings: LiveEditBinding[] = [];
   let pendingCancel: (() => void) | null = null;
+  let pending = false;
   let disposed = false;
   let renderPending = false;
 
   const queue = (render: boolean): void => {
     if (disposed) return;
     renderPending ||= render;
-    if (pendingCancel !== null) return;
-    pendingCancel = schedule(flush);
+    if (pending) return;
+    pending = true;
+    const cancel = schedule(flush);
+    pendingCancel = pending ? cancel : null;
   };
 
   const flush = (): void => {
     if (disposed) return;
+    pending = false;
     pendingCancel = null;
     composition.syncFrame();
     if (renderPending) void composition.renderer.renderFrame();
@@ -192,6 +196,7 @@ export function createLiveEditSession(
       if (disposed) return;
       disposed = true;
       pendingCancel?.();
+      pending = false;
       pendingCancel = null;
       renderPending = false;
       while (bindings.length > 0) bindings.pop()?.dispose();
