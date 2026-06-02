@@ -142,7 +142,7 @@ describe('AnimationController', () => {
     });
   });
 
-  test('adds hold keyframes as zero-duration timeline sets', () => {
+  test('adds hold keyframes that keep the previous value until their time', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);
 
@@ -164,7 +164,7 @@ describe('AnimationController', () => {
     );
   });
 
-  test('removes keyframes by killing timeline tweens', () => {
+  test('removes keyframes from the data-backed keyframe track', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);
     const keyframe = controller.addKeyframe(layer, 'position.x', 2, 100);
@@ -182,12 +182,29 @@ describe('AnimationController', () => {
     const first = controller.editKeyframe(layer, 'position.x', 1, 100);
     const second = controller.editKeyframe(layer, 'position.x', 1, 240);
 
-    expect(second).not.toBe(first);
+    expect(second).toBe(first);
+    expect(second.value).toBe(240);
     expect(controller.findKeyframe(layer, 'position.x', 1)).toBe(second);
 
     composition.seek(1);
 
     expect(layer.transform.position.x).toBe(240);
+  });
+
+  test('editKeyframe preserves later keyframes on the same property', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+
+    controller.addKeyframe(layer, 'position.x', 1, 100);
+    controller.addKeyframe(layer, 'position.x', 2, 200);
+    controller.editKeyframe(layer, 'position.x', 1, 140);
+
+    composition.seek(1.5);
+    expect(layer.transform.position.x).toBe(170);
+
+    composition.seek(2);
+
+    expect(layer.transform.position.x).toBe(200);
   });
 
   test('evaluates expressions with time, frame, layer, and helper context', () => {

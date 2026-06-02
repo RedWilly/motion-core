@@ -41,7 +41,6 @@ export interface Keyframe {
   value: number;
   easing: Easing;
   hold: boolean;
-  tween: TimelineTweenAdapter;
 }
 
 export interface Animation {
@@ -114,13 +113,16 @@ interface CompiledExpression extends Expression {
 const defaultEase = 'power1.out';
 
 export class AnimationController {
+  readonly values: Record<string, number> = {};
   private readonly composition: Composition;
   private readonly keyframes = new Map<Layer, Map<AnimatableProperty, Keyframe[]>>();
+  private readonly baselines = new Map<Layer, Map<AnimatableProperty, number>>();
   private readonly expressions = new Map<Layer, Map<AnimatableProperty, CompiledExpression>>();
   private readonly expressionErrors: EngineError[] = [];
 
   constructor(composition: Composition) {
     this.composition = composition;
+    this.composition.registerMotionTarget(this);
   }
 
   addKeyframe(
@@ -133,17 +135,8 @@ export class AnimationController {
     this.assertLayerCanAnimate(layer);
     this.assertTimeInRange(time);
 
-    const binding = bindLayerMotionProperty(layer, property);
     const propertyKeyframes = this.getPropertyKeyframes(layer, property);
-    const previous = findPreviousKeyframe(propertyKeyframes, time);
-    const startTime = previous?.time ?? 0;
-    const duration = config.hold === true ? 0 : Math.max(time - startTime, 0);
-    const tween = this.createTween(binding, value, {
-      duration,
-      ease: config.easing ?? defaultEase,
-      hold: config.hold ?? false,
-      position: config.hold === true ? time : startTime,
-    });
+    this.rememberBaseline(layer, property);
     const keyframe: Keyframe = {
       id: createId('keyframe'),
       property,
@@ -151,7 +144,6 @@ export class AnimationController {
       value,
       easing: config.easing ?? defaultEase,
       hold: config.hold ?? false,
-      tween,
     };
 
     insertSorted(propertyKeyframes, keyframe);
@@ -166,8 +158,13 @@ export class AnimationController {
     config: KeyframeConfig = {},
   ): Keyframe {
     const existing = this.findKeyframe(layer, property, time);
-    if (existing !== undefined) this.removeKeyframe(layer, existing);
-    return this.addKeyframe(layer, property, time, value, config);
+    if (existing === undefined) return this.addKeyframe(layer, property, time, value, config);
+
+    existing.value = value;
+    existing.easing = config.easing ?? existing.easing;
+    existing.hold = config.hold ?? existing.hold;
+
+    return existing;
   }
 
   findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined {
@@ -181,8 +178,6 @@ export class AnimationController {
 
     const index = propertyKeyframes.indexOf(keyframe);
     if (index >= 0) propertyKeyframes.splice(index, 1);
-    this.composition.timeline.remove?.(keyframe.tween);
-    keyframe.tween.kill();
   }
 
   animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation {
@@ -216,14 +211,27 @@ export class AnimationController {
   }
 
   removeAnimationsForLayer(layer: Layer): void {
-    for (const propertyKeyframes of this.keyframes.get(layer)?.values() ?? []) {
-      for (const keyframe of propertyKeyframes) keyframe.tween.kill();
-    }
     this.keyframes.delete(layer);
+    this.baselines.delete(layer);
     this.composition.timeline.killTweensOf?.(layer.transform.position);
     this.composition.timeline.killTweensOf?.(layer.transform.scale);
     this.composition.timeline.killTweensOf?.(layer.transform.anchor);
     this.composition.timeline.killTweensOf?.(layer);
+  }
+
+  apply(): void {
+    const time = this.composition.timeline.time();
+    const touchedLayers = new Set<Layer>();
+    for (const [layer, layerKeyframes] of this.keyframes) {
+      if (layer.locked) continue;
+      for (const [property, keyframes] of layerKeyframes) {
+        const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time);
+        if (value === undefined) continue;
+        writeBindingValue(bindLayerMotionProperty(layer, property), value);
+        touchedLayers.add(layer);
+      }
+    }
+    for (const layer of touchedLayers) syncLayerToScrawl(layer);
   }
 
   setExpression(layer: Layer, property: AnimatableProperty, source: string): Expression {
@@ -313,11 +321,7 @@ export class AnimationController {
     return propertyKeyframes;
   }
 
-  private createTween(
-    binding: PropertyBinding,
-    value: number,
-    options: TweenOptions,
-  ): TimelineTweenAdapter {
+  private createTween(binding: PropertyBinding, value: number, options: TweenOptions): TimelineTweenAdapter {
     const vars: Record<string, unknown> = {
       [binding.key]: value,
       duration: options.duration,
@@ -373,6 +377,21 @@ export class AnimationController {
         value: time,
       });
     }
+  }
+
+  private rememberBaseline(layer: Layer, property: AnimatableProperty): void {
+    let layerBaselines = this.baselines.get(layer);
+    if (!layerBaselines) {
+      layerBaselines = new Map<AnimatableProperty, number>();
+      this.baselines.set(layer, layerBaselines);
+    }
+    if (!layerBaselines.has(property)) layerBaselines.set(property, readBindingValue(bindLayerMotionProperty(layer, property)));
+  }
+
+  private readBaseline(layer: Layer, property: AnimatableProperty): number {
+    const baseline = this.baselines.get(layer)?.get(property);
+    if (baseline !== undefined) return baseline;
+    return readBindingValue(bindLayerMotionProperty(layer, property));
   }
 }
 
@@ -547,13 +566,30 @@ function assertPositiveDuration(duration: number): void {
   }
 }
 
-function findPreviousKeyframe(keyframes: readonly Keyframe[], time: number): Keyframe | undefined {
-  let previous: Keyframe | undefined;
+function evaluateKeyframes(baseline: number, keyframes: readonly Keyframe[], time: number): number | undefined {
+  if (keyframes.length === 0) return undefined;
+  const first = keyframes[0];
+  if (first === undefined) return undefined;
+  if (time < first.time) return first.hold ? baseline : interpolateValue(baseline, first.value, time, 0, first.time, first.easing);
+
+  let previousValue = baseline;
+  let previousTime = 0;
   for (const keyframe of keyframes) {
-    if (keyframe.time <= time) previous = keyframe;
-    else break;
+    if (time < keyframe.time) {
+      if (keyframe.hold) return previousValue;
+      return interpolateValue(previousValue, keyframe.value, time, previousTime, keyframe.time, keyframe.easing);
+    }
+    previousValue = keyframe.value;
+    previousTime = keyframe.time;
   }
-  return previous;
+  return previousValue;
+}
+
+function interpolateValue(start: number, end: number, time: number, startTime: number, endTime: number, easing: Easing): number {
+  if (endTime <= startTime) return end;
+  const progress = Math.min(Math.max((time - startTime) / (endTime - startTime), 0), 1);
+  const eased = typeof easing === 'function' ? easing(progress) : progress;
+  return start + (end - start) * eased;
 }
 
 function insertSorted(keyframes: Keyframe[], keyframe: Keyframe): void {
