@@ -1,8 +1,8 @@
 import { capabilityError } from '../shared/errors';
 import type {
-  ScrawlGradientConfig,
-  ScrawlGradientKind,
-  ScrawlPatternConfig,
+  GradientConfig,
+  GradientKind,
+  PatternConfig,
   ScrawlStyleAdapter,
   ScrawlStylesAdapter,
   ScrawlStyleState,
@@ -16,10 +16,10 @@ interface ScrawlStyleFactoryModule {
 }
 
 export type {
-  ScrawlGradientColorStop,
-  ScrawlGradientConfig,
-  ScrawlGradientKind,
-  ScrawlPatternConfig,
+  GradientColorStop,
+  GradientConfig,
+  GradientKind,
+  PatternConfig,
   ScrawlStyleAdapter,
   ScrawlStylesAdapter,
   ScrawlStyleState,
@@ -36,7 +36,7 @@ export function createScrawlStylesController(
   const namespace = options.namespace ?? 'motion-style';
   let nextId = 0;
 
-  const createGradient = (config: ScrawlGradientConfig): ScrawlStyleState => {
+  const createGradient = (config: GradientConfig): ScrawlStyleState => {
     const id = namespacedName(namespace, config.id ?? `gradient-${nextId++}`);
     const kind = config.kind ?? 'linear';
     const factory = gradientFactory(scrawl, kind);
@@ -47,7 +47,7 @@ export function createScrawlStylesController(
     return createStyleState(id, style, config);
   };
 
-  const createPattern = (config: ScrawlPatternConfig): ScrawlStyleState => {
+  const createPattern = (config: PatternConfig): ScrawlStyleState => {
     if (scrawl.makePattern === undefined) {
       throw capabilityError(
         'SCRAWL_PATTERN_FACTORY_MISSING',
@@ -88,7 +88,7 @@ export function createScrawlStylesController(
 
 function gradientFactory(
   scrawl: ScrawlStyleFactoryModule,
-  kind: ScrawlGradientKind,
+  kind: GradientKind,
 ): (items: Record<string, unknown>) => ScrawlStyleAdapter {
   if (kind === 'radial') {
     if (scrawl.makeRadialGradient !== undefined) return scrawl.makeRadialGradient;

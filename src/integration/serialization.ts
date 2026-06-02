@@ -9,7 +9,7 @@ import type {
   EnhancedTextLayerConfig,
 } from '../shared/project';
 import type { EngineAdapters } from '../shared/runtime';
-import type { ScrawlEffectConfig } from '../shared/scrawl';
+import type { EffectConfig } from '../shared/scrawl';
 import type {
   SerializedAsset,
   SerializedComposition,
@@ -143,7 +143,7 @@ function serializeLayerConfig(layer: Readonly<Layer>): SerializedLayerConfig {
   return serialized;
 }
 
-function serializeEffectConfig(effect: Readonly<Layer['effects'][number]>): ScrawlEffectConfig {
+function serializeEffectConfig(effect: Readonly<Layer['effects'][number]>): EffectConfig {
   return {
     id: effect.id,
     actions: effect.actions.map((action) => ({ ...action })),

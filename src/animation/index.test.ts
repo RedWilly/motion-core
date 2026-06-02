@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
 import { createTimelineSynchronizer } from '../integration/synchronization';
-import type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared';
+import type { EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createAnimationController, createExpressionRenderHook } from './index';
 
 function createObservedLayer() {
@@ -35,7 +35,7 @@ describe('AnimationController', () => {
   test('animates effect state as a stable motion target on seek', () => {
     const updates: Array<Readonly<Record<string, unknown>>> = [];
     const effects: ScrawlEffectsAdapter = {
-      createEffect(config): ScrawlEffectHandle {
+      createEffect(config): EffectHandle {
         return {
           id: config.id ?? 'effect',
           filter: {

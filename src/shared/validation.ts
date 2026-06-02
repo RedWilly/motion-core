@@ -6,8 +6,8 @@ import type {
   LayerMaskState,
 } from './project';
 import type {
-  ScrawlEffectConfig,
-  ScrawlFilterAction,
+  EffectConfig,
+  EffectAction,
 } from './scrawl';
 
 export interface NormalizedCompositionConfig {
@@ -86,8 +86,8 @@ export function normalizeCompositionConfig(config: CompositionConfig): Normalize
   return normalized;
 }
 
-export function normalizeScrawlEffectConfig(
-  config: Readonly<ScrawlEffectConfig>,
+export function normalizeEffectConfig(
+  config: Readonly<EffectConfig>,
   fallbackId: string,
 ): LayerEffectState {
   if (config.actions.length === 0) {
@@ -109,17 +109,17 @@ export function normalizeScrawlEffectConfig(
 }
 
 export function normalizeLayerEffects(
-  effects: readonly ScrawlEffectConfig[] | undefined,
+  effects: readonly EffectConfig[] | undefined,
 ): LayerEffectState[] {
   if (effects === undefined) return [];
   const normalized: LayerEffectState[] = new Array(effects.length);
   for (let index = 0; index < effects.length; index += 1) {
-    normalized[index] = normalizeScrawlEffectConfig(effects[index]!, `effect-${index}`);
+    normalized[index] = normalizeEffectConfig(effects[index]!, `effect-${index}`);
   }
   return normalized;
 }
 
-export function normalizeScrawlMaskConfig(
+export function normalizeMaskConfig(
   config: Readonly<LayerMaskConfig> | undefined,
 ): LayerMaskState | null {
   if (config === undefined) return null;
@@ -148,18 +148,18 @@ function normalizeEffectId(id: string | undefined, fallbackId: string): string {
   return normalized === undefined || normalized.length === 0 ? fallbackId : normalized;
 }
 
-function cloneFilterAction(action: ScrawlFilterAction): ScrawlFilterAction {
+function cloneFilterAction(action: EffectAction): EffectAction {
   const cloned: Record<string, unknown> = {};
-  const keys = Object.keys(action) as Array<keyof ScrawlFilterAction>;
+  const keys = Object.keys(action) as Array<keyof EffectAction>;
   for (let index = 0; index < keys.length; index += 1) {
     const key = keys[index]!;
     const value = action[key];
     cloned[key] = Array.isArray(value) ? [...value] : value;
   }
-  return cloned as ScrawlFilterAction;
+  return cloned as EffectAction;
 }
 
-function createEffectValues(actions: readonly ScrawlFilterAction[]): Record<string, number> {
+function createEffectValues(actions: readonly EffectAction[]): Record<string, number> {
   const values: Record<string, number> = {};
 
   for (const action of actions) {

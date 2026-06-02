@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { createAnimationController } from '../animation';
-import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared';
+import type { EffectConfig, EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createComposition } from './composition';
 
 function createFakeEffectsAdapter(): { adapter: ScrawlEffectsAdapter; calls: string[] } {
   const calls: string[] = [];
   let nextFilter = 0;
   const adapter: ScrawlEffectsAdapter = {
-    createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle {
+    createEffect(config: EffectConfig): EffectHandle {
       const id = config.id ?? `filter-${nextFilter}`;
       const filter = {
         name: `${id}-${nextFilter++}`,

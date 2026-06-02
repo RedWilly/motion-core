@@ -16,10 +16,10 @@ import type {
   Transform,
 } from '../shared/project';
 import type {
-  ScrawlEffectConfig,
+  EffectConfig,
   ScrawlGroupAdapter,
-  ScrawlGradientConfig,
-  ScrawlPatternConfig,
+  GradientConfig,
+  PatternConfig,
   ScrawlStyleState,
   ScrawlTransformState,
 } from '../shared/scrawl';
@@ -27,8 +27,8 @@ import type { CompositionRuntime, EngineAdapters, RenderAdapter } from '../share
 import {
   normalizeCompositionConfig,
   normalizeLayerEffects,
-  normalizeScrawlEffectConfig,
-  normalizeScrawlMaskConfig,
+  normalizeEffectConfig,
+  normalizeMaskConfig,
 } from '../shared/validation';
 import { MemoryTimeline, NoopRenderer } from './adapters';
 import { AssetRegistry } from './assets';
@@ -192,7 +192,7 @@ export function createComposition(
       const visible = layerConfig.visible ?? true;
       const opacity = layerConfig.opacity ?? 1;
       const effects = normalizeLayerEffects(layerConfig.effects);
-      const mask = normalizeScrawlMaskConfig(layerConfig.mask);
+      const mask = normalizeMaskConfig(layerConfig.mask);
       const precomposition = layerConfig.precomp?.composition ?? null;
       const shape = createShapeState(layerConfig, entity);
       const textState = type === 'text' ? createTextState(layerConfig, entity) : undefined;
@@ -313,8 +313,8 @@ export function createComposition(
       return layer;
     },
 
-    addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState {
-      const effect = normalizeScrawlEffectConfig(config, `effect-${layer.effects.length}`);
+    addEffect(layer: Layer, config: EffectConfig): LayerEffectState {
+      const effect = normalizeEffectConfig(config, `effect-${layer.effects.length}`);
       layer.effects.push(effect);
       attachLayerEffect(effectsController, layer, effect);
       configureLayerEffectMotionTarget(effectsController, effect);
@@ -344,7 +344,7 @@ export function createComposition(
       layer.effects.length = 0;
     },
 
-    createGradient(config: ScrawlGradientConfig): ScrawlStyleState {
+    createGradient(config: GradientConfig): ScrawlStyleState {
       if (stylesController === undefined) {
         throw capabilityError(
           'SCRAWL_STYLES_UNAVAILABLE',
@@ -358,7 +358,7 @@ export function createComposition(
       return style;
     },
 
-    createPattern(config: ScrawlPatternConfig): ScrawlStyleState {
+    createPattern(config: PatternConfig): ScrawlStyleState {
       if (stylesController === undefined) {
         throw capabilityError(
           'SCRAWL_STYLES_UNAVAILABLE',
@@ -394,7 +394,7 @@ export function createComposition(
     setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
       detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
       detachMaskFeather(effectsController, layer);
-      const mask = normalizeScrawlMaskConfig(config) as LayerMaskState;
+      const mask = normalizeMaskConfig(config) as LayerMaskState;
 
       layer.mask = mask;
       applyLayerMask(effectsController, layer, mask);
