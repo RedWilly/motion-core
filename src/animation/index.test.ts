@@ -175,6 +175,19 @@ describe('AnimationController', () => {
     expect(layer.transform.position.x).toBe(0);
   });
 
+  test('removing the final keyframe resets the captured property baseline', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+    const keyframe = controller.addKeyframe(layer, 'position.x', 2, 100);
+
+    controller.removeKeyframe(layer, keyframe);
+    layer.transform.position.x = 50;
+    controller.addKeyframe(layer, 'position.x', 2, 100);
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(75);
+  });
+
   test('drops data-backed keyframes for layers removed from the composition', () => {
     const setCalls: Array<Readonly<Record<string, unknown>>> = [];
     const composition = createComposition(

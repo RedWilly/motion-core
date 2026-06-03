@@ -173,11 +173,20 @@ export class AnimationController {
   }
 
   removeKeyframe(layer: Layer, keyframe: Keyframe): void {
-    const propertyKeyframes = this.keyframes.get(layer)?.get(keyframe.property);
+    const layerKeyframes = this.keyframes.get(layer);
+    const propertyKeyframes = layerKeyframes?.get(keyframe.property);
     if (!propertyKeyframes) return;
 
     const index = propertyKeyframes.indexOf(keyframe);
     if (index >= 0) propertyKeyframes.splice(index, 1);
+    if (propertyKeyframes.length > 0) return;
+
+    layerKeyframes?.delete(keyframe.property);
+    this.baselines.get(layer)?.delete(keyframe.property);
+    if (layerKeyframes?.size === 0) {
+      this.keyframes.delete(layer);
+      this.baselines.delete(layer);
+    }
   }
 
   animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation {
