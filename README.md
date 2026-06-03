@@ -2,7 +2,7 @@
 
 Typed 2D motion composition core for browser motion graphics.
 
-`motionkit` gives application code one model for layers, transforms, animation, effects, masks, media sync, live editing, serialization, and export. It coordinates three runtime libraries without making every app rebuild the glue:
+`@willyrg/motionkit` gives application code one model for layers, transforms, animation, effects, masks, media sync, live editing, serialization, and export. It coordinates three runtime libraries without making every app rebuild the glue:
 
 - **Scrawl-canvas** draws and owns canvas artefacts, Cells, Groups, styles, filters, and render cycles.
 - **GSAP** can own timeline interpolation, easing, and choreography.
@@ -11,10 +11,10 @@ Typed 2D motion composition core for browser motion graphics.
 The package has one public import path:
 
 ```ts
-import { createComposition } from 'motionkit';
+import { createComposition } from '@willyrg/motionkit';
 ```
 
-Do not import from internal folders. The source tree is allowed to change; `motionkit` is the public API.
+Do not import from internal folders. The source tree is allowed to change; `@willyrg/motionkit` is the public API.
 
 ## Contents
 
@@ -40,7 +40,7 @@ Do not import from internal folders. The source tree is allowed to change; `moti
 
 ## When To Use It
 
-Use `motionkit` when you need a typed composition model for browser-based motion work:
+Use `@willyrg/motionkit` when you need a typed composition model for browser-based motion work:
 
 - Build a timeline of image, video, text, shape, SVG, audio, particle, or precomp layers.
 - Animate layer transforms and stable numeric state.
@@ -55,7 +55,7 @@ Do not use it as a general scene graph or DOM animation library. The design assu
 For package consumers:
 
 ```bash
-bun add motionkit gsap mediabunny scrawl-canvas
+bun add @willyrg/motionkit gsap mediabunny scrawl-canvas
 ```
 
 For this repository:
@@ -88,7 +88,7 @@ import {
   createAnimationController,
   createComposition,
   loadBrowserScrawlAdapter,
-} from 'motionkit';
+} from '@willyrg/motionkit';
 
 const adapters = await loadBrowserScrawlAdapter({
   canvas: 'preview-canvas',
@@ -161,7 +161,7 @@ The core objects are:
 - **Motion target**: any object with numeric `values` and an `apply()` method.
 - **Adapter**: runtime integration that creates Scrawl entities, timelines, renderers, Cells, effects, and styles.
 
-Design rule: app code writes into `motionkit` state first. The engine then maps that state into Scrawl, media, and export.
+Design rule: app code writes into `@willyrg/motionkit` state first. The engine then maps that state into Scrawl, media, and export.
 
 ## Reconfiguration
 
@@ -334,7 +334,7 @@ It does not render a frame and does not seek media. That separation keeps previe
 Use `TimelineSynchronizer` when you need a complete frame:
 
 ```ts
-import { createTimelineSynchronizer } from 'motionkit';
+import { createTimelineSynchronizer } from '@willyrg/motionkit';
 
 const sync = createTimelineSynchronizer(composition, {
   frameRate: 30,
@@ -408,7 +408,7 @@ type AnimatableProperty =
 With a GSAP timeline adapter:
 
 ```ts
-import { createGsapTimelineFactory } from 'motionkit';
+import { createGsapTimelineFactory } from '@willyrg/motionkit';
 import { gsap } from 'gsap';
 
 adapters.createTimeline = createGsapTimelineFactory(gsap);
@@ -495,7 +495,7 @@ import {
   pixelate,
   threshold,
   tint,
-} from 'motionkit';
+} from '@willyrg/motionkit';
 
 const image = composition.addLayer('image', '/assets/plate.png', {
   name: 'plate',
@@ -975,7 +975,7 @@ seek/play/export
 
 ## API Reference
 
-This section documents the public API exported from `motionkit`.
+This section documents the public API exported from `@willyrg/motionkit`.
 
 ### Composition
 
@@ -1337,10 +1337,10 @@ try {
 
 ### Type imports are missing
 
-Import from `motionkit`, not internal paths.
+Import from `@willyrg/motionkit`, not internal paths.
 
 ```ts
-import type { Composition, Layer, EffectConfig } from 'motionkit';
+import type { Composition, Layer, EffectConfig } from '@willyrg/motionkit';
 ```
 
 ## References
