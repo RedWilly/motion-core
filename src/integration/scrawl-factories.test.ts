@@ -123,7 +123,7 @@ describe('createScrawlEntityFactories', () => {
       type: 'text',
       name: 'caption',
       config: {
-        text: 'motion-core',
+        text: 'motionkit',
         enhancedText: {
           fontString: '24px sans-serif',
           fillStyle,
@@ -145,7 +145,7 @@ describe('createScrawlEntityFactories', () => {
     expect(calls).toEqual(['EnhancedLabel']);
     expect(items[0]).toMatchObject({
       name: 'ns-caption',
-      text: 'motion-core',
+      text: 'motionkit',
       fontString: '24px sans-serif',
       fillStyle: fillStyle.style,
       layoutTemplate: fillPart,
