@@ -444,6 +444,9 @@ describe('createComposition', () => {
             addArtefacts(entity) {
               cellCalls.push(`add:${entity.name}`);
             },
+            removeArtefacts(entity) {
+              cellCalls.push(`remove:${entity.name}`);
+            },
           };
           return {
             name: `${context.layerName}-cell`,
@@ -452,6 +455,9 @@ describe('createComposition', () => {
             },
             render() {
               cellCalls.push('render-cell');
+            },
+            kill() {
+              cellCalls.push('kill-cell');
             },
           };
         },
@@ -472,12 +478,22 @@ describe('createComposition', () => {
     expect(layer.precomposition).toBe(child);
     expect(layer.scrawlCell?.name).toBe('nested-cell');
     expect(child.timeline.time()).toBe(4);
+    expect(() => composition.addPrecomposition(child, { name: 'duplicate' })).toThrow(
+      'Composition is already mounted as a precomposition.',
+    );
+    composition.removeLayer(layer);
+    const detachedChildLayer = child.addLayer('shape', { name: 'detached-child-box' });
+
     expect(cellCalls).toEqual([
       'nested:64x48',
       `move:${childLayer.scrawlEntity.name}`,
       'render-cell',
       `add:${lateChildLayer.scrawlEntity.name}`,
+      `remove:${childLayer.scrawlEntity.name}`,
+      `remove:${lateChildLayer.scrawlEntity.name}`,
+      'kill-cell',
     ]);
+    expect(detachedChildLayer.name).toBe('detached-child-box');
   });
 
   test('syncFrame updates timeline-backed state without media or render side effects', () => {

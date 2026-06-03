@@ -56,7 +56,7 @@ describe('exportFrame', () => {
     expect(renderer?.captureOptions).toEqual([{ mimeType: 'image/jpeg', quality: 0.8 }]);
   });
 
-  test('returns an ArrayBuffer only when requested', async () => {
+  test('returns requested non-Blob frame output formats', async () => {
     const composition = createComposition(
       { width: 100, height: 100 },
       {
@@ -66,10 +66,12 @@ describe('exportFrame', () => {
       },
     );
 
-    const result = await exportFrame(composition, 0, { outputType: 'arraybuffer' });
+    const buffer = await exportFrame(composition, 0, { outputType: 'arraybuffer' });
+    const dataUrl = await exportFrame(composition, 0, { outputType: 'dataurl' });
 
-    expect(result).toBeInstanceOf(ArrayBuffer);
-    expect(new TextDecoder().decode(result as ArrayBuffer)).toBe('frame');
+    expect(buffer).toBeInstanceOf(ArrayBuffer);
+    expect(new TextDecoder().decode(buffer as ArrayBuffer)).toBe('frame');
+    expect(dataUrl).toBe('data:image/png;base64,ZnJhbWU=');
   });
 
   test('rejects invalid times and quality before capture', async () => {

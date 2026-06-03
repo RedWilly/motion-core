@@ -285,7 +285,8 @@ describe('AnimationController', () => {
     });
     const controller = createAnimationController(composition);
 
-    controller.setExpression(layer, 'position.x', 'clamp(value + time + frame + layer.transform.position.y, 0, 100)');
+    controller.setExpression(layer, 'position.x', ({ value, time, frame, layer }, { clamp }) =>
+      clamp(value + time + frame + layer.transform.position.y, 0, 100));
     const result = controller.applyExpressions(1);
 
     expect(result.errors).toHaveLength(0);
@@ -299,7 +300,7 @@ describe('AnimationController', () => {
     const layer = composition.addLayer('shape');
     const controller = createAnimationController(composition);
 
-    controller.setExpression(layer, 'opacity', 'audio.amplitude * audio.bands.bass');
+    controller.setExpression(layer, 'opacity', ({ audio }) => (audio?.amplitude ?? 0) * (audio?.bands.bass ?? 0));
     controller.applyExpressions(0, {
       amplitude: 0.5,
       bands: { bass: 0.8, mid: 0.2, treble: 0.1 },
@@ -316,7 +317,10 @@ describe('AnimationController', () => {
     });
     const controller = createAnimationController(composition);
 
-    controller.setExpression(layer, 'position.x', 'time < 1 ? 20 : missing.value');
+    controller.setExpression(layer, 'position.x', ({ time }) => {
+      if (time < 1) return 20;
+      throw new Error('missing.value');
+    });
     expect(controller.applyExpressions(0).errors).toHaveLength(0);
     expect(layer.transform.position.x).toBe(20);
 
@@ -334,7 +338,7 @@ describe('AnimationController', () => {
     const layer = composition.addLayer('shape');
     const controller = createAnimationController(composition);
 
-    controller.setExpression(layer, 'rotation', 'random(10, 20, 3) + wiggle(2, 5, 1)');
+    controller.setExpression(layer, 'rotation', (_context, { random, wiggle }) => random(10, 20, 3) + wiggle(2, 5, 1));
     controller.applyExpressions(0.5);
     const first = layer.transform.rotation;
     controller.applyExpressions(0.5);
@@ -348,7 +352,7 @@ describe('AnimationController', () => {
     const layer = composition.addLayer('shape');
     const controller = createAnimationController(composition);
 
-    controller.setExpression(layer, 'rotation', '30');
+    controller.setExpression(layer, 'rotation', () => 30);
     controller.applyExpressions(0);
     controller.removeExpression(layer, 'rotation');
     controller.applyExpressions(1);
@@ -361,7 +365,7 @@ describe('AnimationController', () => {
     const controller = createAnimationController(composition);
     const hook = createExpressionRenderHook(controller);
 
-    controller.setExpression(layer, 'position.x', 'time * 10');
+    controller.setExpression(layer, 'position.x', ({ time }) => time * 10);
     await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(2);
 
     expect(layer.transform.position.x).toBe(20);
@@ -376,7 +380,7 @@ describe('AnimationController', () => {
       bands: { bass: 0.5, mid: 0, treble: 0 },
     }));
 
-    controller.setExpression(layer, 'opacity', 'audio.amplitude + audio.bands.bass');
+    controller.setExpression(layer, 'opacity', ({ audio }) => (audio?.amplitude ?? 0) + (audio?.bands.bass ?? 0));
     await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(0);
 
     expect(layer.opacity).toBe(0.75);

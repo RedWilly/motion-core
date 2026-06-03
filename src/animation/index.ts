@@ -78,7 +78,7 @@ export interface Expression {
   id: string;
   layer: Layer;
   property: AnimatableProperty;
-  source: string;
+  evaluator: ExpressionEvaluator;
 }
 
 export interface ExpressionApplyResult {
@@ -87,6 +87,8 @@ export interface ExpressionApplyResult {
 }
 
 export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
+
+export type ExpressionEvaluator = (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
 
 type PropertyBinding = NumericPropertyBinding;
 
@@ -106,7 +108,6 @@ interface TweenOptions {
 }
 
 interface CompiledExpression extends Expression {
-  evaluate: (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
   lastValidValue: number;
 }
 
@@ -248,15 +249,14 @@ export class AnimationController {
     for (const layer of touchedLayers) syncLayerToScrawl(layer);
   }
 
-  setExpression(layer: Layer, property: AnimatableProperty, source: string): Expression {
+  setExpression(layer: Layer, property: AnimatableProperty, evaluator: ExpressionEvaluator): Expression {
     this.assertLayerCanAnimate(layer);
     const binding = bindLayerMotionProperty(layer, property);
     const compiled: CompiledExpression = {
       id: createId('expression'),
       layer,
       property,
-      source,
-      evaluate: compileExpression(source),
+      evaluator,
       lastValidValue: readBindingValue(binding),
     };
     let layerExpressions = this.expressions.get(layer);
@@ -296,7 +296,7 @@ export class AnimationController {
         const binding = bindLayerMotionProperty(layer, expression.property);
         const context = createExpressionContext(this.composition, layer, expression.property, binding, time, audio);
         try {
-          const value = expression.evaluate(context, createExpressionHelpers(time, expression.id));
+          const value = expression.evaluator(context, createExpressionHelpers(time, expression.id));
           const numericValue = numberExpressionResult(value, expression.property);
           writeBindingValue(binding, numericValue);
           expression.lastValidValue = numericValue;
@@ -424,31 +424,6 @@ export function createExpressionRenderHook(
   };
 }
 
-function compileExpression(source: string): CompiledExpression['evaluate'] {
-  if (source.trim().length === 0) {
-    throw validationError('EMPTY_EXPRESSION', 'Expression source must not be empty.');
-  }
-
-  try {
-    return new Function(
-      'context',
-      'helpers',
-      `
-const { time, frame, layer, property, value, audio } = context;
-const { clamp, lerp, random, wiggle } = helpers;
-return (${source});
-`,
-    ) as CompiledExpression['evaluate'];
-  } catch (error) {
-    throw new EngineError({
-      code: 'EXPRESSION_COMPILE_FAILED',
-      message: `Unable to compile expression: ${source}`,
-      category: 'validation',
-      originalError: error,
-    });
-  }
-}
-
 function createExpressionContext(
   composition: Composition,
   layer: Layer,
@@ -512,14 +487,14 @@ function numberExpressionResult(value: unknown, property: AnimatableProperty): n
 }
 
 function createExpressionError(expression: CompiledExpression, error: unknown): EngineError {
+  const errorMessage = error instanceof Error ? `: ${error.message}` : '';
   return new EngineError({
     code: 'EXPRESSION_EVALUATION_FAILED',
-    message: `Expression failed for ${expression.layer.name}.${expression.property}: ${expression.source}`,
+    message: `Expression failed for ${expression.layer.name}.${expression.property}${errorMessage}`,
     category: 'runtime',
     context: {
       layerName: expression.layer.name,
       propertyName: expression.property,
-      value: expression.source,
     },
     originalError: error,
   });
@@ -530,7 +505,7 @@ function expressionView(expression: CompiledExpression): Expression {
     id: expression.id,
     layer: expression.layer,
     property: expression.property,
-    source: expression.source,
+    evaluator: expression.evaluator,
   };
 }
 

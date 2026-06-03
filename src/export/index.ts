@@ -424,17 +424,20 @@ function qualityToMediabunny(runtime: MediabunnyVideoRuntime, quality: VideoExpo
 }
 
 async function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-        return;
-      }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
 
-      reject(capabilityError('FRAME_DATA_URL_FAILED', 'Unable to convert frame blob to a data URL.'));
-    });
-    reader.addEventListener('error', () => reject(reader.error));
-    reader.readAsDataURL(blob);
-  });
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+
+  if (typeof btoa !== 'function') {
+    throw capabilityError(
+      'FRAME_DATA_URL_UNAVAILABLE',
+      'Data URL export requires a runtime with btoa().',
+    );
+  }
+
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
 }

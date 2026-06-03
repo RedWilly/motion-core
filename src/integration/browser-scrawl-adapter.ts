@@ -128,7 +128,7 @@ function requireCanvasElement(canvas: HTMLCanvasElement | string): HTMLCanvasEle
   if (element instanceof HTMLCanvasElement) return element;
 
   throw capabilityError(
-    'SCROLL_CANVAS_ELEMENT_MISSING',
+    'SCRAWL_CANVAS_ELEMENT_MISSING',
     `Unable to find canvas element "${canvas}".`,
     'Pass an existing HTMLCanvasElement or an id for a canvas already in the document.',
   );

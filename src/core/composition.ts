@@ -65,6 +65,7 @@ interface CompositionInternals {
 }
 
 const compositionInternals = new WeakMap<Composition, CompositionInternals>();
+const precompositionOwners = new WeakMap<Composition, Layer>();
 
 function mergeTransform(transform?: Partial<Transform>): Transform {
   const position = transform?.position;
@@ -194,9 +195,14 @@ export function createComposition(
       motionTargets.remove(layer.shape.stroke);
     }
     if (layer.textState !== undefined) motionTargets.remove(layer.textState);
+    if (layer.precomposition !== null && precompositionOwners.get(layer.precomposition) === layer) {
+      compositionInternals.get(layer.precomposition)?.setHostGroup(undefined);
+      precompositionOwners.delete(layer.precomposition);
+    }
     layer.media?.pause?.();
     layer.media?.dispose?.();
     delete layer.media;
+    layer.scrawlCell?.kill?.();
     assets.removeOwnedByLayer(layer);
     activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
     layer.scrawlEntity.kill?.();
@@ -299,6 +305,9 @@ export function createComposition(
       if (childComposition.id === id || containsPrecomposition(childComposition, composition)) {
         throw new Error('Precomposition circular reference detected.');
       }
+      if (precompositionOwners.has(childComposition)) {
+        throw new Error('Composition is already mounted as a precomposition.');
+      }
 
       const precompConfig: PrecompositionLayerConfig = {
         composition: childComposition,
@@ -309,6 +318,7 @@ export function createComposition(
         ...layerConfig,
         precomp: precompConfig,
       });
+      precompositionOwners.set(childComposition, layer);
 
       if (layer.scrawlCell !== undefined) {
         layer.source = layer.scrawlCell.name;
@@ -508,11 +518,13 @@ export function createComposition(
       if (group === activeGroup) return;
       const previousGroup = activeGroup;
       activeGroup = group;
-      if (group === undefined) delete runtime.group;
-      else {
-        runtime.group = group;
-        moveLayersIntoGroup(runtime.layers, group, previousGroup);
+      if (group === undefined) {
+        delete runtime.group;
+        for (const layer of runtime.layers) previousGroup?.removeArtefacts?.(...layerArtefacts(layer));
+        return;
       }
+      runtime.group = group;
+      moveLayersIntoGroup(runtime.layers, group, previousGroup);
     },
   });
 

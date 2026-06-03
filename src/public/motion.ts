@@ -14,6 +14,7 @@ export type {
   ExpressionAudioContext,
   ExpressionAudioProvider,
   ExpressionContext,
+  ExpressionEvaluator,
   ExpressionHelpers,
   Keyframe,
   KeyframeConfig,

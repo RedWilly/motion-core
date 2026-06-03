@@ -30,6 +30,8 @@ describe('TimelineSynchronizer', () => {
   test('coordinates play and pause across timeline, renderer, and media', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const { events, target } = createMediaTarget('video');
+    const layer = composition.addLayer('video');
+    layer.media = target;
     const sync = createTimelineSynchronizer(composition);
 
     sync.addMedia(target);
