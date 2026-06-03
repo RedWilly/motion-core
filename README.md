@@ -55,6 +55,12 @@ Do not use it as a general scene graph or DOM animation library. The design assu
 For package consumers:
 
 ```bash
+npm install @willyrg/motionkit gsap mediabunny scrawl-canvas
+```
+
+Or with Bun:
+
+```bash
 bun add @willyrg/motionkit gsap mediabunny scrawl-canvas
 ```
 
@@ -76,6 +82,62 @@ Runtime libraries are peer dependencies:
   "scrawl-canvas": "^8.19.0"
 }
 ```
+
+## Minimal Example
+
+```html
+<canvas id="stage" width="1280" height="720"></canvas>
+```
+
+```ts
+import {
+  createComposition,
+  exportVideo,
+  loadBrowserScrawlAdapter,
+} from '@willyrg/motionkit';
+
+const adapters = await loadBrowserScrawlAdapter({
+  canvas: 'stage',
+  namespace: 'demo',
+  backgroundColor: '#101114',
+});
+
+const composition = createComposition({
+  name: 'demo',
+  width: 1280,
+  height: 720,
+  duration: 4,
+  frameRate: 30,
+}, adapters);
+
+composition.addLayer('shape', {
+  name: 'card',
+  shape: {
+    kind: 'rectangle',
+    width: 240,
+    height: 140,
+    fillStyle: '#ffcc00',
+  },
+  transform: {
+    position: { x: 320, y: 360 },
+    anchor: { x: 120, y: 70 },
+  },
+});
+
+const videoBlob = await exportVideo(composition, {
+  format: 'mp4',
+  quality: 'high',
+});
+
+const url = URL.createObjectURL(videoBlob);
+const link = document.createElement('a');
+link.href = url;
+link.download = 'motionkit-export.mp4';
+link.click();
+URL.revokeObjectURL(url);
+```
+
+MotionKit stores composition state. Scrawl-canvas renders that state to canvas. Mediabunny encodes the rendered canvas frames into video.
 
 ## Quick Start
 
@@ -843,10 +905,35 @@ const videoBlob = await exportVideo(composition, {
   format: 'mp4',
   quality: 'high',
   frameRate: 30,
+  onProgress: (progress) => console.log(Math.round(progress * 100), '%'),
 });
+
+const url = URL.createObjectURL(videoBlob);
+const link = document.createElement('a');
+link.href = url;
+link.download = 'composition.mp4';
+link.click();
+URL.revokeObjectURL(url);
 ```
 
-The built-in video export adapter uses Mediabunny and requires a renderer with `getFrameCanvas`.
+The built-in video export adapter uses Mediabunny. You normally do not need to create it manually; `exportVideo` uses it by default.
+
+Video export has two runtime requirements:
+
+- A render adapter, usually from `loadBrowserScrawlAdapter`, so MotionKit can render each timeline frame to canvas.
+- The built-in Mediabunny export adapter, so MotionKit can encode those canvas frames into `mp4` or `webm`.
+
+You only pass a custom video adapter when replacing Mediabunny or changing encoder behavior:
+
+```ts
+const videoBlob = await exportVideo(
+  composition,
+  { format: 'webm', quality: 'medium' },
+  customVideoExportAdapter,
+);
+```
+
+Current built-in video export writes the visual canvas track. Audio layer synchronization is supported during playback, but the built-in export adapter does not currently mux audio into the exported video.
 
 ## Serialization
 
@@ -1332,7 +1419,10 @@ try {
 
 - Frame export requires `renderer.captureFrame`.
 - Video export requires `renderer.getFrameCanvas`.
+- Create browser compositions with `loadBrowserScrawlAdapter` before exporting video.
+- Mediabunny encodes the video; the render adapter still provides the canvas frames.
 - Video export needs browser encoder support required by Mediabunny.
+- Built-in video export currently writes the visual track only; muxed audio export needs a custom `VideoExportAdapter`.
 - `outputType: 'dataurl'` requires a runtime with `btoa`.
 
 ### Type imports are missing
