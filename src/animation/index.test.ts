@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core/composition';
-import { syncToTimelineTime } from '../integration/synchronization';
-import type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
+import { createTimelineSynchronizer } from '../integration/synchronization';
+import type { EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createAnimationController, createExpressionRenderHook } from './index';
 
 function createObservedLayer() {
@@ -35,7 +35,7 @@ describe('AnimationController', () => {
   test('animates effect state as a stable motion target on seek', () => {
     const updates: Array<Readonly<Record<string, unknown>>> = [];
     const effects: ScrawlEffectsAdapter = {
-      createEffect(config): ScrawlEffectHandle {
+      createEffect(config): EffectHandle {
         return {
           id: config.id ?? 'effect',
           filter: {
@@ -142,7 +142,7 @@ describe('AnimationController', () => {
     });
   });
 
-  test('adds hold keyframes as zero-duration timeline sets', () => {
+  test('adds hold keyframes that keep the previous value until their time', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);
 
@@ -164,7 +164,7 @@ describe('AnimationController', () => {
     );
   });
 
-  test('removes keyframes by killing timeline tweens', () => {
+  test('removes keyframes from the data-backed keyframe track', () => {
     const { composition, layer } = createObservedLayer();
     const controller = createAnimationController(composition);
     const keyframe = controller.addKeyframe(layer, 'position.x', 2, 100);
@@ -173,6 +173,108 @@ describe('AnimationController', () => {
     composition.seek(2);
 
     expect(layer.transform.position.x).toBe(0);
+  });
+
+  test('removing the final keyframe resets the captured property baseline', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+    const keyframe = controller.addKeyframe(layer, 'position.x', 2, 100);
+
+    controller.removeKeyframe(layer, keyframe);
+    layer.transform.position.x = 50;
+    controller.addKeyframe(layer, 'position.x', 2, 100);
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(75);
+  });
+
+  test('drops data-backed keyframes for layers removed from the composition', () => {
+    const setCalls: Array<Readonly<Record<string, unknown>>> = [];
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        entityFactories: {
+          shape: (context) => ({
+            name: context.name,
+            type: 'shape',
+            set(values) {
+              setCalls.push({ ...values });
+              return this;
+            },
+            kill() {},
+          }),
+        },
+      },
+    );
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+    controller.addKeyframe(layer, 'position.x', 1, 100);
+
+    composition.removeLayer(layer);
+    setCalls.length = 0;
+    composition.seek(1);
+
+    expect(setCalls).toEqual([]);
+  });
+
+  test('editKeyframe replaces an existing keyframe at the same time', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+
+    const first = controller.editKeyframe(layer, 'position.x', 1, 100);
+    const second = controller.editKeyframe(layer, 'position.x', 1, 240);
+
+    expect(second).toBe(first);
+    expect(second.value).toBe(240);
+    expect(controller.findKeyframe(layer, 'position.x', 1)).toBe(second);
+
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(240);
+  });
+
+  test('editKeyframe preserves later keyframes on the same property', () => {
+    const { composition, layer } = createObservedLayer();
+    const controller = createAnimationController(composition);
+
+    controller.addKeyframe(layer, 'position.x', 1, 100);
+    controller.addKeyframe(layer, 'position.x', 2, 200);
+    controller.editKeyframe(layer, 'position.x', 1, 140);
+
+    composition.seek(1.5);
+    expect(layer.transform.position.x).toBe(170);
+
+    composition.seek(2);
+
+    expect(layer.transform.position.x).toBe(200);
+  });
+
+  test('uses timeline string easing parser for data-backed keyframes', () => {
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 2 },
+      {
+        createTimeline(duration) {
+          return {
+            play() {},
+            pause() {},
+            seek(time) {
+              currentTime = Math.min(Math.max(time, 0), duration);
+            },
+            time: () => currentTime,
+            duration: () => duration,
+            parseEase: (ease) => ease === 'quadratic' ? (progress) => progress * progress : undefined,
+          };
+        },
+      },
+    );
+    const layer = composition.addLayer('shape');
+    const controller = createAnimationController(composition);
+
+    controller.addKeyframe(layer, 'position.x', 2, 100, { easing: 'quadratic' });
+    composition.seek(1);
+
+    expect(layer.transform.position.x).toBe(25);
   });
 
   test('evaluates expressions with time, frame, layer, and helper context', () => {
@@ -260,10 +362,7 @@ describe('AnimationController', () => {
     const hook = createExpressionRenderHook(controller);
 
     controller.setExpression(layer, 'position.x', 'time * 10');
-    await syncToTimelineTime(composition, 2, {
-      frameRate: composition.frameRate,
-      hooks: [hook],
-    });
+    await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(2);
 
     expect(layer.transform.position.x).toBe(20);
     expect(setCalls.at(-1)?.['startX']).toBe(20);
@@ -278,10 +377,7 @@ describe('AnimationController', () => {
     }));
 
     controller.setExpression(layer, 'opacity', 'audio.amplitude + audio.bands.bass');
-    await syncToTimelineTime(composition, 0, {
-      frameRate: composition.frameRate,
-      hooks: [hook],
-    });
+    await createTimelineSynchronizer(composition, { hooks: [hook] }).seek(0);
 
     expect(layer.opacity).toBe(0.75);
   });

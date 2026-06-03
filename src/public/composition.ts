@@ -4,13 +4,11 @@ export {
   createGsapTimelineFactory,
   createTimelineSynchronizer,
   loadBrowserScrawlAdapter,
-  syncToTimelineTime,
 } from '../integration';
 export type {
   BrowserScrawlAdapter,
   BrowserScrawlAdapterOptions,
   PreRenderHook,
-  SynchronizationOptions,
   TimelineSynchronizerConfig,
 } from '../integration';
 

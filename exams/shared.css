@@ -108,6 +108,65 @@ code {
   padding: 18px;
 }
 
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+.control-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 18px;
+  border-left: 1px solid #2b3034;
+  background: #14171a;
+}
+
+.control-row {
+  display: flex;
+  gap: 8px;
+}
+
+.compact-row > * {
+  flex: 1 1 0;
+}
+
+.control-panel button {
+  min-height: 34px;
+  border: 1px solid #3a424a;
+  border-radius: 6px;
+  background: #1f252b;
+  color: #f1f3f2;
+  font: inherit;
+  cursor: pointer;
+}
+
+.control-panel button:hover {
+  background: #29313a;
+}
+
+.control-item,
+.toggle-row {
+  display: grid;
+  gap: 7px;
+  color: #c9d1d5;
+  font-size: 0.9rem;
+}
+
+.toggle-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.wide-control {
+  grid-column: 1 / -1;
+}
+
+.control-item input[type="range"] {
+  width: 100%;
+}
+
 canvas {
   display: block;
   width: min(100%, 960px);
@@ -130,5 +189,14 @@ canvas {
 
   .canvas-wrap {
     padding: 10px;
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .control-panel {
+    border-top: 1px solid #2b3034;
+    border-left: 0;
   }
 }

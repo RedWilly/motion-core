@@ -16,10 +16,10 @@ import type {
   Transform,
 } from '../shared/project';
 import type {
-  ScrawlEffectConfig,
+  EffectConfig,
   ScrawlGroupAdapter,
-  ScrawlGradientConfig,
-  ScrawlPatternConfig,
+  GradientConfig,
+  PatternConfig,
   ScrawlStyleState,
   ScrawlTransformState,
 } from '../shared/scrawl';
@@ -27,8 +27,8 @@ import type { CompositionRuntime, EngineAdapters, RenderAdapter } from '../share
 import {
   normalizeCompositionConfig,
   normalizeLayerEffects,
-  normalizeScrawlEffectConfig,
-  normalizeScrawlMaskConfig,
+  normalizeEffectConfig,
+  normalizeMaskConfig,
 } from '../shared/validation';
 import { MemoryTimeline, NoopRenderer } from './adapters';
 import { AssetRegistry } from './assets';
@@ -160,6 +160,57 @@ export function createComposition(
     startedAtMs: 0,
   };
 
+  const registerLayerRuntime = (layer: Layer): void => {
+    layer.parent?.children.push(layer);
+    runtime.layers.push(layer);
+    assets.registerLayerSource(layer);
+    registry.register(layer, layer.scrawlEntity);
+    activeGroup?.addArtefacts?.(...layerArtefacts(layer));
+    syncLayerToScrawl(layer);
+    if (layer.shape !== undefined) {
+      layer.shape.apply();
+      motionTargets.register(layer.shape.fill);
+      motionTargets.register(layer.shape.stroke);
+    }
+    if (layer.textState !== undefined) {
+      layer.textState.apply();
+      motionTargets.register(layer.textState);
+    }
+    for (const effect of layer.effects) {
+      attachLayerEffect(effectsController, layer, effect);
+      configureLayerEffectMotionTarget(effectsController, effect);
+      motionTargets.register(effect);
+    }
+    applyLayerMask(effectsController, layer, layer.mask);
+  };
+
+  const disposeLayerRuntime = (layer: Layer): void => {
+    for (const effect of layer.effects) {
+      detachLayerEffect(effectsController, layer, effect);
+      motionTargets.remove(effect);
+    }
+    if (layer.shape !== undefined) {
+      motionTargets.remove(layer.shape.fill);
+      motionTargets.remove(layer.shape.stroke);
+    }
+    if (layer.textState !== undefined) motionTargets.remove(layer.textState);
+    layer.media?.pause?.();
+    layer.media?.dispose?.();
+    delete layer.media;
+    assets.removeOwnedByLayer(layer);
+    activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
+    layer.scrawlEntity.kill?.();
+    precompositionTimes.delete(layer);
+    registry.unregister(layer);
+  };
+
+  const reindexLayers = (): void => {
+    runtime.layers.forEach((item, nextIndex) => {
+      item.zIndex = nextIndex;
+      syncLayerToScrawl(item);
+    });
+  };
+
   const composition = {
     id,
     name: normalized.name,
@@ -192,7 +243,7 @@ export function createComposition(
       const visible = layerConfig.visible ?? true;
       const opacity = layerConfig.opacity ?? 1;
       const effects = normalizeLayerEffects(layerConfig.effects);
-      const mask = normalizeScrawlMaskConfig(layerConfig.mask);
+      const mask = normalizeMaskConfig(layerConfig.mask);
       const precomposition = layerConfig.precomp?.composition ?? null;
       const shape = createShapeState(layerConfig, entity);
       const textState = type === 'text' ? createTextState(layerConfig, entity) : undefined;
@@ -233,53 +284,9 @@ export function createComposition(
             ? { ...baseLayer, source }
             : { ...baseLayer, source, content: layerConfig.content };
 
-      parent?.children.push(layer);
-      this.layers.push(layer);
-      assets.registerLayerSource(layer);
-      registry.register(layer, entity);
-      activeGroup?.addArtefacts?.(...layerArtefacts(layer));
-      syncLayerToScrawl(layer);
-      if (layer.shape !== undefined) {
-        layer.shape.apply();
-        motionTargets.register(layer.shape.fill);
-        motionTargets.register(layer.shape.stroke);
-      }
-      if (layer.textState !== undefined) {
-        layer.textState.apply();
-        motionTargets.register(layer.textState);
-      }
-      for (const effect of layer.effects) {
-        attachLayerEffect(effectsController, layer, effect);
-        configureLayerEffectMotionTarget(effectsController, effect);
-        motionTargets.register(effect);
-      }
-      applyLayerMask(effectsController, layer, layer.mask);
+      registerLayerRuntime(layer);
 
       return layer;
-    },
-
-    addImage(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('image', source, layerConfig);
-    },
-
-    addVideo(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('video', source, layerConfig);
-    },
-
-    addAudio(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('audio', source, layerConfig);
-    },
-
-    addSvg(source: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('svg', source, layerConfig);
-    },
-
-    addShape(layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('shape', layerConfig);
-    },
-
-    addText(text: string, layerConfig: LayerConfig = {}): Layer {
-      return this.addLayer('text', { ...layerConfig, text });
     },
 
     addPrecomposition(
@@ -313,8 +320,8 @@ export function createComposition(
       return layer;
     },
 
-    addEffect(layer: Layer, config: ScrawlEffectConfig): LayerEffectState {
-      const effect = normalizeScrawlEffectConfig(config, `effect-${layer.effects.length}`);
+    addEffect(layer: Layer, config: EffectConfig): LayerEffectState {
+      const effect = normalizeEffectConfig(config, `effect-${layer.effects.length}`);
       layer.effects.push(effect);
       attachLayerEffect(effectsController, layer, effect);
       configureLayerEffectMotionTarget(effectsController, effect);
@@ -344,7 +351,7 @@ export function createComposition(
       layer.effects.length = 0;
     },
 
-    createGradient(config: ScrawlGradientConfig): ScrawlStyleState {
+    createGradient(config: GradientConfig): ScrawlStyleState {
       if (stylesController === undefined) {
         throw capabilityError(
           'SCRAWL_STYLES_UNAVAILABLE',
@@ -358,7 +365,7 @@ export function createComposition(
       return style;
     },
 
-    createPattern(config: ScrawlPatternConfig): ScrawlStyleState {
+    createPattern(config: PatternConfig): ScrawlStyleState {
       if (stylesController === undefined) {
         throw capabilityError(
           'SCRAWL_STYLES_UNAVAILABLE',
@@ -394,7 +401,7 @@ export function createComposition(
     setMask(layer: Layer, config: LayerMaskConfig): LayerMaskState {
       detachLayerMaskCell(layer, findLayerById(this.layers, layer.mask?.sourceLayerId), activeGroup);
       detachMaskFeather(effectsController, layer);
-      const mask = normalizeScrawlMaskConfig(config) as LayerMaskState;
+      const mask = normalizeMaskConfig(config) as LayerMaskState;
 
       layer.mask = mask;
       applyLayerMask(effectsController, layer, mask);
@@ -435,30 +442,12 @@ export function createComposition(
       const siblingIndex = layer.parent?.children.indexOf(layer) ?? -1;
       if (siblingIndex >= 0) layer.parent?.children.splice(siblingIndex, 1);
       this.clearMask(layer);
-      detachMaskFeather(effectsController, layer);
-      for (const effect of layer.effects) {
-        detachLayerEffect(effectsController, layer, effect);
-        motionTargets.remove(effect);
-      }
-      if (layer.shape !== undefined) {
-        motionTargets.remove(layer.shape.fill);
-        motionTargets.remove(layer.shape.stroke);
-      }
-      if (layer.textState !== undefined) motionTargets.remove(layer.textState);
-      layer.media?.pause?.();
-      layer.media?.dispose?.();
-      delete layer.media;
-      assets.removeOwnedByLayer(layer);
-      activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
-      layer.scrawlEntity.kill?.();
-      precompositionTimes.delete(layer);
-      registry.unregister(layer);
+      motionTargets.removeLayer(layer);
+      disposeLayerRuntime(layer);
 
       const index = this.layers.indexOf(layer);
       if (index >= 0) this.layers.splice(index, 1);
-      this.layers.forEach((item, nextIndex) => {
-        item.zIndex = nextIndex;
-      });
+      reindexLayers();
     },
 
     reorderLayer(layer: Layer, newIndex: number): void {
@@ -468,9 +457,7 @@ export function createComposition(
       const boundedIndex = Math.min(Math.max(newIndex, 0), this.layers.length - 1);
       this.layers.splice(currentIndex, 1);
       this.layers.splice(boundedIndex, 0, layer);
-      this.layers.forEach((item, index) => {
-        item.zIndex = index;
-      });
+      reindexLayers();
     },
 
     play(): void {

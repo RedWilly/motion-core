@@ -69,7 +69,8 @@ const composition = createComposition(
   adapters,
 );
 
-const title = composition.addText('Motion', {
+const title = composition.addLayer('text', {
+  text: 'Motion',
   name: 'title',
   transform: {
     position: { x: 960, y: 540 },
@@ -81,18 +82,18 @@ composition.seek(0);
 composition.play();
 ```
 
-Layer helpers are the normal way to add content:
+Use `addLayer` as the single path for adding content:
 
 ```ts
-composition.addShape({ name: 'background' });
-composition.addText('Caption', { name: 'caption' });
-composition.addImage('/assets/plate.png', { name: 'plate' });
-composition.addVideo('/assets/clip.mp4', { name: 'clip' });
-composition.addAudio('/assets/voice.wav', { name: 'voice' });
-composition.addSvg('/assets/logo.svg', { name: 'logo' });
+composition.addLayer('shape', { name: 'background' });
+composition.addLayer('text', { text: 'Caption', name: 'caption' });
+composition.addLayer('image', '/assets/plate.png', { name: 'plate' });
+composition.addLayer('video', '/assets/clip.mp4', { name: 'clip' });
+composition.addLayer('audio', '/assets/voice.wav', { name: 'voice' });
+composition.addLayer('svg', '/assets/logo.svg', { name: 'logo' });
 ```
 
-`addLayer` still exists for dynamic code, but most app code should use the typed helpers.
+This keeps layer creation as one concept: `type`, optional `source`, and config.
 
 ## Playback
 
@@ -124,7 +125,7 @@ const composition = createComposition({
   duration: 5,
 });
 
-const layer = composition.addShape({
+const layer = composition.addLayer('shape', {
   name: 'box',
   transform: {
     position: { x: 100, y: 120 },
@@ -137,6 +138,8 @@ animation.addKeyframe(layer, 'position.x', 0, 100);
 animation.addKeyframe(layer, 'position.x', 2, 900, {
   easing: 'power2.inOut',
 });
+
+animation.editKeyframe(layer, 'position.x', 2, 760);
 
 composition.seek(1);
 ```
@@ -182,7 +185,7 @@ import {
 
 const composition = createComposition({ width: 1280, height: 720 });
 
-const image = composition.addImage('/assets/plate.png', {
+const image = composition.addLayer('image', '/assets/plate.png', {
   name: 'plate',
   effects: [
     blur({ id: 'soften', radius: 3 }),
@@ -270,7 +273,7 @@ There are two mask paths.
 Same-layer masks apply directly to one Scrawl entity:
 
 ```ts
-const foreground = composition.addShape({
+const foreground = composition.addLayer('shape', {
   name: 'foreground',
   shape: {
     kind: 'rectangle',
@@ -291,11 +294,11 @@ composition.setMask(foreground, {
 Layer-to-layer masks use a Scrawl Cell when the browser adapter can create one:
 
 ```ts
-const target = composition.addImage('/assets/subject.png', {
+const target = composition.addLayer('image', '/assets/subject.png', {
   name: 'subject',
 });
 
-const matte = composition.addShape({
+const matte = composition.addLayer('shape', {
   name: 'subject-matte',
   shape: {
     kind: 'wheel',
@@ -327,7 +330,8 @@ const child = createComposition({
   frameRate: 30,
 });
 
-child.addText('Live', {
+child.addLayer('text', {
+  text: 'Live',
   name: 'label',
 });
 
@@ -369,7 +373,7 @@ Video layers can use Scrawl's native Picture video controls when the source is a
 For deterministic decoded-frame preview, the browser adapter also has a Mediabunny bridge. It decodes video frames into one reusable Scrawl RawAsset canvas and installs that asset on the video Picture.
 
 ```ts
-const video = composition.addVideo('/assets/clip.mp4', {
+const video = composition.addLayer('video', '/assets/clip.mp4', {
   name: 'clip',
   video: {
     inPoint: 0,
@@ -389,6 +393,67 @@ Audio analysis uses reusable buffers so callers can avoid per-frame allocation:
 const frame = createEmptyAudioAnalysisFrame();
 audioAnalyzer.analyzeInto(frame);
 ```
+
+## Live Editing
+
+Use the editor session for UI controls. It owns the editing rules, while composition still owns layers, effects, masks, playback, and rendering.
+
+The default edit mode is `set`: change the value now, sync the frame, and render if the session is configured to render.
+
+```ts
+const editor = createLiveEditSession(composition);
+
+const blurEffect = composition.addEffect(layer, blur({
+  id: 'blur',
+  radius: 0,
+}));
+
+editor.bindInput(blurRadiusInput, blurEffect.values, 'radius', {
+  parse: 'float',
+});
+```
+
+Layer motion properties have their own binding path, so editor controls and animation use the same property map:
+
+```ts
+editor.bindLayerInput(xInput, layer, 'position.x', {
+  parse: 'float',
+});
+```
+
+For animation-aware editing, use `autoKey` mode. That changes the value now and records it on the timeline.
+
+```ts
+const animation = createAnimationController(composition);
+
+editor.setLayerProperty(layer, 'position.x', 400, {
+  mode: 'autoKey',
+  animation,
+  time: composition.timeline.time(),
+});
+
+editor.setValue(blurEffect.values, 'radius', 12, {
+  mode: 'autoKey',
+  time: composition.timeline.time(),
+});
+```
+
+Manual keyframes are still available through the animation controller:
+
+```ts
+animation.addKeyframe(layer, 'position.x', 0, 100);
+animation.addKeyframe(layer, 'position.x', 2, 900);
+```
+
+If the user goes back to an existing keyframe and edits it, use `editKeyframe`:
+
+```ts
+animation.editKeyframe(layer, 'position.x', 0, 140);
+```
+
+`editKeyframe` creates the keyframe when it does not exist, and replaces the keyframe at that exact time when it does. Editor `autoKey` uses this same behavior for layer motion properties, so repeated edits at the same playhead time update one keyframe instead of stacking duplicates.
+
+The session batches fast input events into one frame sync. That keeps sliders responsive without turning every input event into a separate render pass.
 
 ## Export
 
@@ -462,6 +527,7 @@ The public API is curated through `src/public`. Implementation folders stay sepa
 
 - `src/core`: composition lifecycle and runtime state.
 - `src/animation`: keyframes, expressions, and GSAP-backed motion.
+- `src/editor`: browser live-edit bindings that write into motion-core state first.
 - `src/integration`: Scrawl, GSAP, Mediabunny, serialization, and sync adapters.
 - `src/audio`: audio analysis and audio media bridge.
 - `src/export`: frame, sequence, and video export.

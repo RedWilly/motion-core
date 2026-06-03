@@ -1,7 +1,7 @@
 import type { Layer } from './project';
 import type { MotionStateTarget } from './runtime';
 
-export type ScrawlFilterActionName =
+export type EffectActionName =
   | 'alpha-to-channels'
   | 'alpha-to-luminance'
   | 'area-alpha'
@@ -47,29 +47,24 @@ export type ScrawlFilterActionName =
   | 'vary-channels-by-weights'
   | 'zoom-blur';
 
-export type ScrawlFilterLine = 'source' | 'source-alpha' | string;
+export type EffectLine = 'source' | 'source-alpha' | string;
 
-export interface ScrawlFilterAction {
-  readonly action: ScrawlFilterActionName;
-  readonly lineIn?: ScrawlFilterLine;
-  readonly lineMix?: ScrawlFilterLine;
+export interface EffectAction {
+  readonly action: EffectActionName;
+  readonly lineIn?: EffectLine;
+  readonly lineMix?: EffectLine;
   readonly lineOut?: string;
   readonly opacity?: number;
   readonly [key: string]: unknown;
 }
 
-export interface ScrawlEffectConfig {
+export interface EffectConfig {
   readonly id?: string;
-  readonly actions: readonly ScrawlFilterAction[];
+  readonly actions: readonly EffectAction[];
   readonly opacity?: number;
 }
 
-export type EffectActionName = ScrawlFilterActionName;
-export type EffectLine = ScrawlFilterLine;
-export type EffectAction = ScrawlFilterAction;
-export type EffectConfig = ScrawlEffectConfig;
-
-export type ScrawlMaskMode =
+export type MaskMode =
   | 'clip'
   | 'copy'
   | 'destination-atop'
@@ -84,31 +79,26 @@ export type ScrawlMaskMode =
   | 'source-over'
   | 'xor';
 
-export interface ScrawlMaskConfig {
-  readonly mode?: ScrawlMaskMode;
+export interface MaskConfig {
+  readonly mode?: MaskMode;
   readonly opacity?: number;
   readonly feather?: number;
   readonly memoize?: boolean;
 }
 
-export type MaskMode = ScrawlMaskMode;
-export type MaskConfig = ScrawlMaskConfig;
-
-export interface ScrawlEffectHandle {
+export interface EffectHandle {
   readonly id: string;
   readonly filter: ScrawlFilterAdapter;
 }
 
-export type EffectHandle = ScrawlEffectHandle;
+export type GradientKind = 'linear' | 'radial' | 'conic';
 
-export type ScrawlGradientKind = 'linear' | 'radial' | 'conic';
+export type GradientColorStop = readonly [number, string];
 
-export type ScrawlGradientColorStop = readonly [number, string];
-
-export interface ScrawlGradientConfig {
+export interface GradientConfig {
   readonly id?: string;
-  readonly kind?: ScrawlGradientKind;
-  readonly colors: readonly ScrawlGradientColorStop[];
+  readonly kind?: GradientKind;
+  readonly colors: readonly GradientColorStop[];
   readonly startX?: number | string;
   readonly startY?: number | string;
   readonly endX?: number | string;
@@ -123,11 +113,7 @@ export interface ScrawlGradientConfig {
   readonly [key: string]: unknown;
 }
 
-export type GradientKind = ScrawlGradientKind;
-export type GradientColorStop = ScrawlGradientColorStop;
-export type GradientConfig = ScrawlGradientConfig;
-
-export interface ScrawlPatternConfig {
+export interface PatternConfig {
   readonly id?: string;
   readonly asset?: string;
   readonly imageSource?: string;
@@ -136,8 +122,6 @@ export interface ScrawlPatternConfig {
   readonly removeAssetOnKill?: boolean | string;
   readonly [key: string]: unknown;
 }
-
-export type PatternConfig = ScrawlPatternConfig;
 
 export interface ScrawlStyleAdapter {
   readonly name: string;
@@ -232,17 +216,17 @@ export interface ScrawlCellAdapter {
 }
 
 export interface ScrawlEffectsAdapter {
-  createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle;
-  addEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, config: ScrawlEffectConfig): ScrawlEffectHandle;
-  updateEffect(effect: ScrawlEffectHandle, values: Readonly<Record<string, unknown>>): void;
-  removeEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, effect: ScrawlEffectHandle): void;
+  createEffect(config: EffectConfig): EffectHandle;
+  addEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, config: EffectConfig): EffectHandle;
+  updateEffect(effect: EffectHandle, values: Readonly<Record<string, unknown>>): void;
+  removeEffect(target: ScrawlEntityAdapter | ScrawlGroupAdapter, effect: EffectHandle): void;
   clearEffects(target: ScrawlEntityAdapter | ScrawlGroupAdapter): void;
-  applyMask(target: ScrawlEntityAdapter, config?: ScrawlMaskConfig): ScrawlEffectHandle | undefined;
+  applyMask(target: ScrawlEntityAdapter, config?: MaskConfig): EffectHandle | undefined;
 }
 
 export interface ScrawlStylesAdapter {
-  createGradient(config: ScrawlGradientConfig): ScrawlStyleState;
-  createPattern(config: ScrawlPatternConfig): ScrawlStyleState;
+  createGradient(config: GradientConfig): ScrawlStyleState;
+  createPattern(config: PatternConfig): ScrawlStyleState;
   updateStyle(style: ScrawlStyleState, values: Readonly<Record<string, unknown>>): void;
   removeStyle(style: ScrawlStyleState): void;
 }

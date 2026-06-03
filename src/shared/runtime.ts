@@ -10,6 +10,7 @@ import type {
 export interface MotionStateTarget<TValues extends Record<string, number> = Record<string, number>> {
   readonly values: TValues;
   apply(): void;
+  removeLayer?(layer: Layer): void;
 }
 
 export interface MediaSyncTarget {
@@ -43,6 +44,7 @@ export interface TimelineAdapter {
   time(): number;
   duration(value?: number): number;
   eventCallback?(event: string, callback: (() => void) | null): void;
+  parseEase?(ease: string): ((progress: number) => number) | undefined;
   to?(
     target: object,
     vars: Readonly<Record<string, unknown>>,
@@ -68,11 +70,6 @@ export interface EngineAdapters {
   entityFactories?: Partial<Record<Layer['type'], LayerEntityFactory>>;
   importScrawlPacket?: (packet: string) => unknown;
 }
-
-export type MotionRuntimeAdapters = EngineAdapters;
-export type Renderer = RenderAdapter;
-export type Timeline = TimelineAdapter;
-export type TimelineTween = TimelineTweenAdapter;
 
 export interface PrecompositionCellFactoryContext {
   readonly parent: CompositionRuntime;

@@ -1,28 +1,28 @@
 import { capabilityError } from '../shared/errors';
 import type {
-  ScrawlEffectConfig,
-  ScrawlEffectHandle,
+  EffectConfig,
+  EffectHandle,
   ScrawlEffectsAdapter,
   ScrawlEntityAdapter,
   ScrawlFilterAdapter,
   ScrawlGroupAdapter,
-  ScrawlMaskConfig,
+  MaskConfig,
 } from '../shared/scrawl';
-import { normalizeScrawlEffectConfig, normalizeScrawlMaskConfig } from '../shared/validation';
+import { normalizeEffectConfig, normalizeMaskConfig } from '../shared/validation';
 import type { ScrawlFactoryModule } from './scrawl-factories';
 
 type ScrawlFilterTarget = ScrawlEntityAdapter | ScrawlGroupAdapter;
 
 export type {
-  ScrawlEffectConfig,
-  ScrawlFilterAction,
-  ScrawlFilterActionName,
-  ScrawlFilterLine,
-  ScrawlMaskConfig,
-  ScrawlMaskMode,
+  EffectConfig,
+  EffectAction,
+  EffectActionName,
+  EffectLine,
+  MaskConfig,
+  MaskMode,
 } from '../shared/scrawl';
 
-export type { ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/scrawl';
+export type { EffectHandle, ScrawlEffectsAdapter } from '../shared/scrawl';
 
 export interface ScrawlEffectsOptions {
   readonly namespace?: string;
@@ -43,10 +43,10 @@ export function createScrawlEffectsController(
   const makeFilter = scrawl.makeFilter;
   const namespace = options.namespace ?? 'motion-effect';
   let nextId = 0;
-  const ownedFilters = new WeakMap<ScrawlFilterTarget, Set<ScrawlEffectHandle>>();
+  const ownedFilters = new WeakMap<ScrawlFilterTarget, Set<EffectHandle>>();
 
-  const createEffect = (config: ScrawlEffectConfig): ScrawlEffectHandle => {
-    const normalized = normalizeScrawlEffectConfig(config, `filter-${nextId++}`);
+  const createEffect = (config: EffectConfig): EffectHandle => {
+    const normalized = normalizeEffectConfig(config, `filter-${nextId++}`);
     const id = namespacedName(namespace, normalized.id);
     const filter = makeFilter({
       name: id,
@@ -56,14 +56,14 @@ export function createScrawlEffectsController(
     return { id, filter };
   };
 
-  const addEffect = (target: ScrawlFilterTarget, config: ScrawlEffectConfig): ScrawlEffectHandle => {
+  const addEffect = (target: ScrawlFilterTarget, config: EffectConfig): EffectHandle => {
     const effect = createEffect(config);
     addFilter(target, effect.filter);
     trackFilter(ownedFilters, target, effect);
     return effect;
   };
 
-  const updateEffect = (effect: ScrawlEffectHandle, values: Readonly<Record<string, unknown>>): void => {
+  const updateEffect = (effect: EffectHandle, values: Readonly<Record<string, unknown>>): void => {
     if (!effect.filter.set) {
       throw capabilityError(
         'SCRAWL_FILTER_SET_MISSING',
@@ -73,7 +73,7 @@ export function createScrawlEffectsController(
     effect.filter.set(values);
   };
 
-  const removeEffect = (target: ScrawlFilterTarget, effect: ScrawlEffectHandle): void => {
+  const removeEffect = (target: ScrawlFilterTarget, effect: EffectHandle): void => {
     if (!target.removeFilters) {
       throw missingFilterTargetError(target, 'removeFilters');
     }
@@ -93,8 +93,8 @@ export function createScrawlEffectsController(
     owned.clear();
   };
 
-  const applyMask = (maskEntity: ScrawlEntityAdapter, config: ScrawlMaskConfig = {}): ScrawlEffectHandle | undefined => {
-    const normalized = normalizeScrawlMaskConfig(config);
+  const applyMask = (maskEntity: ScrawlEntityAdapter, config: MaskConfig = {}): EffectHandle | undefined => {
+    const normalized = normalizeMaskConfig(config);
     if (normalized === null) return undefined;
 
     const mode = normalized.mode;
@@ -149,9 +149,9 @@ function namespacedName(namespace: string, id: string): string {
 }
 
 function trackFilter(
-  ownedFilters: WeakMap<ScrawlFilterTarget, Set<ScrawlEffectHandle>>,
+  ownedFilters: WeakMap<ScrawlFilterTarget, Set<EffectHandle>>,
   target: ScrawlFilterTarget,
-  effect: ScrawlEffectHandle,
+  effect: EffectHandle,
 ): void {
   const filters = ownedFilters.get(target);
   if (filters) {
@@ -162,9 +162,9 @@ function trackFilter(
 }
 
 function forgetFilter(
-  ownedFilters: WeakMap<ScrawlFilterTarget, Set<ScrawlEffectHandle>>,
+  ownedFilters: WeakMap<ScrawlFilterTarget, Set<EffectHandle>>,
   target: ScrawlFilterTarget,
-  effect: ScrawlEffectHandle,
+  effect: EffectHandle,
 ): void {
   const filters = ownedFilters.get(target);
   if (!filters) return;

@@ -5,13 +5,14 @@ import { basename, join, relative, sep } from 'node:path';
 const root = join(import.meta.dir);
 const workspaceRoot = join(root, '..');
 const maxDependenciesPerModule = 3;
-const maxTopLevelModules = 7;
+const maxTopLevelModules = 8;
 const maxModuleEntrypointExports = 10;
 const supportModules = new Set(['shared']);
 const expectedTopLevelModules = new Set([
   'animation',
   'audio',
   'core',
+  'editor',
   'export',
   'integration',
   'public',
@@ -22,9 +23,10 @@ const allowedProductionDependencies = new Map<string, ReadonlySet<string>>([
   ['animation', new Set(['integration', 'shared'])],
   ['audio', new Set(['shared'])],
   ['core', new Set(['integration', 'shared'])],
+  ['editor', new Set(['animation', 'shared'])],
   ['export', new Set(['integration', 'shared'])],
   ['integration', new Set(['shared'])],
-  ['public', new Set(['animation', 'audio', 'core', 'export', 'integration', 'shared'])],
+  ['public', new Set(['animation', 'audio', 'core', 'editor', 'export', 'integration', 'shared'])],
   ['shared', new Set()],
 ]);
 

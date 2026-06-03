@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Layer, LayerType, ScrawlEntityAdapter, ScrawlGroupAdapter } from '../shared/types';
+import type { Layer, LayerType, ScrawlEntityAdapter, ScrawlGroupAdapter } from '../shared';
 import { createScrawlEntityFactories, type ScrawlFactoryModule } from './scrawl-factories';
 
 function createEntity(type: string, name: string): ScrawlEntityAdapter {

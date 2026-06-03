@@ -34,7 +34,7 @@ async function main() {
     adapters,
   );
 
-  const stage = composition.addShape({
+  const stage = composition.addLayer('shape', {
     name: 'stage',
     transform: { position: { x: 480, y: 270 }, anchor: { x: 360, y: 190 } },
     shape: {
@@ -62,7 +62,7 @@ async function main() {
     paletteEnd: 999,
   });
 
-  const orb = composition.addShape({
+  const orb = composition.addLayer('shape', {
     name: 'animated-orb',
     transform: { position: { x: 260, y: 270 }, anchor: { x: 0, y: 0 } },
     shape: {
@@ -77,7 +77,8 @@ async function main() {
     ],
   });
 
-  const label = composition.addText('motion-core + Scrawl-canvas', {
+  const label = composition.addLayer('text', {
+    text: 'motion-core + Scrawl-canvas',
     name: 'label',
     transform: { position: { x: 480, y: 420 }, anchor: { x: 0, y: 0 } },
     scrawl: {

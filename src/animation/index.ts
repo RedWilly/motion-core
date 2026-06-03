@@ -3,16 +3,16 @@ import type { Composition, Layer } from '../shared/project';
 import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime';
 import { createId } from '../shared/ids';
 import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
+import {
+  bindMotionTargetProperty,
+  bindLayerMotionProperty,
+  readNumericBinding,
+  writeNumericBinding,
+  type LayerMotionProperty,
+  type NumericPropertyBinding,
+} from '../shared/layer-properties';
 
-export type AnimatableProperty =
-  | 'position.x'
-  | 'position.y'
-  | 'rotation'
-  | 'scale.x'
-  | 'scale.y'
-  | 'anchor.x'
-  | 'anchor.y'
-  | 'opacity';
+export type AnimatableProperty = LayerMotionProperty;
 
 export type Easing = string | ((progress: number) => number);
 
@@ -41,7 +41,6 @@ export interface Keyframe {
   value: number;
   easing: Easing;
   hold: boolean;
-  tween: TimelineTweenAdapter;
 }
 
 export interface Animation {
@@ -89,9 +88,21 @@ export interface ExpressionApplyResult {
 
 export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
 
-interface PropertyBinding {
-  target: object;
-  key: string;
+type PropertyBinding = NumericPropertyBinding;
+
+interface TweenRequest {
+  readonly binding: PropertyBinding;
+  readonly value: number;
+}
+
+interface TweenOptions {
+  duration: number;
+  ease: Easing;
+  hold?: boolean;
+  repeat?: number;
+  yoyo?: boolean;
+  onComplete?: () => void;
+  position: number;
 }
 
 interface CompiledExpression extends Expression {
@@ -102,13 +113,16 @@ interface CompiledExpression extends Expression {
 const defaultEase = 'power1.out';
 
 export class AnimationController {
+  readonly values: Record<string, number> = {};
   private readonly composition: Composition;
   private readonly keyframes = new Map<Layer, Map<AnimatableProperty, Keyframe[]>>();
+  private readonly baselines = new Map<Layer, Map<AnimatableProperty, number>>();
   private readonly expressions = new Map<Layer, Map<AnimatableProperty, CompiledExpression>>();
   private readonly expressionErrors: EngineError[] = [];
 
   constructor(composition: Composition) {
     this.composition = composition;
+    this.composition.registerMotionTarget(this);
   }
 
   addKeyframe(
@@ -121,17 +135,8 @@ export class AnimationController {
     this.assertLayerCanAnimate(layer);
     this.assertTimeInRange(time);
 
-    const binding = bindProperty(layer, property);
     const propertyKeyframes = this.getPropertyKeyframes(layer, property);
-    const previous = findPreviousKeyframe(propertyKeyframes, time);
-    const startTime = previous?.time ?? 0;
-    const duration = config.hold === true ? 0 : Math.max(time - startTime, 0);
-    const tween = this.createTween(binding, value, {
-      duration,
-      ease: config.easing ?? defaultEase,
-      hold: config.hold ?? false,
-      position: config.hold === true ? time : startTime,
-    });
+    this.rememberBaseline(layer, property);
     const keyframe: Keyframe = {
       id: createId('keyframe'),
       property,
@@ -139,56 +144,61 @@ export class AnimationController {
       value,
       easing: config.easing ?? defaultEase,
       hold: config.hold ?? false,
-      tween,
     };
 
     insertSorted(propertyKeyframes, keyframe);
     return keyframe;
   }
 
+  editKeyframe(
+    layer: Layer,
+    property: AnimatableProperty,
+    time: number,
+    value: number,
+    config: KeyframeConfig = {},
+  ): Keyframe {
+    const existing = this.findKeyframe(layer, property, time);
+    if (existing === undefined) return this.addKeyframe(layer, property, time, value, config);
+
+    existing.value = value;
+    existing.easing = config.easing ?? existing.easing;
+    existing.hold = config.hold ?? existing.hold;
+
+    return existing;
+  }
+
+  findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined {
+    this.assertTimeInRange(time);
+    return this.keyframes.get(layer)?.get(property)?.find((keyframe) => keyframe.time === time);
+  }
+
   removeKeyframe(layer: Layer, keyframe: Keyframe): void {
-    const propertyKeyframes = this.keyframes.get(layer)?.get(keyframe.property);
+    const layerKeyframes = this.keyframes.get(layer);
+    const propertyKeyframes = layerKeyframes?.get(keyframe.property);
     if (!propertyKeyframes) return;
 
     const index = propertyKeyframes.indexOf(keyframe);
     if (index >= 0) propertyKeyframes.splice(index, 1);
-    this.composition.timeline.remove?.(keyframe.tween);
-    keyframe.tween.kill();
+    if (propertyKeyframes.length > 0) return;
+
+    layerKeyframes?.delete(keyframe.property);
+    this.baselines.get(layer)?.delete(keyframe.property);
+    if (layerKeyframes?.size === 0) {
+      this.keyframes.delete(layer);
+      this.baselines.delete(layer);
+    }
   }
 
   animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation {
     this.assertLayerCanAnimate(layer);
-    assertPositiveDuration(config.duration);
-
-    const tweens: TimelineTweenAdapter[] = [];
-    const position = this.composition.timeline.time() + (config.delay ?? 0);
-
+    const requests: TweenRequest[] = [];
     for (const property of Object.keys(values) as AnimatableProperty[]) {
       const value = values[property];
       if (value === undefined) continue;
-
-      const binding = bindProperty(layer, property);
-      const options: {
-        duration: number;
-        ease: Easing;
-        repeat?: number;
-        yoyo?: boolean;
-        onComplete?: () => void;
-        position: number;
-      } = {
-        duration: config.duration,
-        ease: config.easing ?? defaultEase,
-        position,
-      };
-
-      if (config.repeat !== undefined) options.repeat = config.repeat;
-      if (config.yoyo !== undefined) options.yoyo = config.yoyo;
-      if (config.onComplete !== undefined) options.onComplete = config.onComplete;
-
-      tweens.push(this.createTween(binding, value, options));
+      requests.push({ binding: bindLayerMotionProperty(layer, property), value });
     }
 
-    return createAnimation(createId('animation'), tweens);
+    return this.animateBindings(requests, config);
   }
 
   animateTarget<TValues extends Record<string, number>>(
@@ -196,54 +206,51 @@ export class AnimationController {
     values: MotionTargetValues<TValues>,
     config: AnimationConfig,
   ): Animation {
-    assertPositiveDuration(config.duration);
     this.composition.registerMotionTarget(target);
-
-    const tweens: TimelineTweenAdapter[] = [];
-    const position = this.composition.timeline.time() + (config.delay ?? 0);
+    const requests: TweenRequest[] = [];
     const keys = Object.keys(values) as Array<keyof TValues & string>;
 
     for (const key of keys) {
       const value = values[key];
       if (value === undefined) continue;
-
-      const options: {
-        duration: number;
-        ease: Easing;
-        repeat?: number;
-        yoyo?: boolean;
-        onComplete?: () => void;
-        position: number;
-      } = {
-        duration: config.duration,
-        ease: config.easing ?? defaultEase,
-        position,
-      };
-
-      if (config.repeat !== undefined) options.repeat = config.repeat;
-      if (config.yoyo !== undefined) options.yoyo = config.yoyo;
-      if (config.onComplete !== undefined) options.onComplete = config.onComplete;
-
-      tweens.push(this.createTween({ target: target.values, key }, value, options));
+      requests.push({ binding: bindMotionTargetProperty(target, key), value });
     }
 
-    return createAnimation(createId('animation'), tweens);
+    return this.animateBindings(requests, config);
   }
 
   removeAnimationsForLayer(layer: Layer): void {
-    for (const propertyKeyframes of this.keyframes.get(layer)?.values() ?? []) {
-      for (const keyframe of propertyKeyframes) keyframe.tween.kill();
-    }
     this.keyframes.delete(layer);
+    this.baselines.delete(layer);
     this.composition.timeline.killTweensOf?.(layer.transform.position);
     this.composition.timeline.killTweensOf?.(layer.transform.scale);
     this.composition.timeline.killTweensOf?.(layer.transform.anchor);
     this.composition.timeline.killTweensOf?.(layer);
   }
 
+  removeLayer(layer: Layer): void {
+    this.removeAnimationsForLayer(layer);
+    this.expressions.delete(layer);
+  }
+
+  apply(): void {
+    const time = this.composition.timeline.time();
+    const touchedLayers = new Set<Layer>();
+    for (const [layer, layerKeyframes] of this.keyframes) {
+      if (layer.locked) continue;
+      for (const [property, keyframes] of layerKeyframes) {
+        const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time, this.composition.timeline.parseEase);
+        if (value === undefined) continue;
+        writeBindingValue(bindLayerMotionProperty(layer, property), value);
+        touchedLayers.add(layer);
+      }
+    }
+    for (const layer of touchedLayers) syncLayerToScrawl(layer);
+  }
+
   setExpression(layer: Layer, property: AnimatableProperty, source: string): Expression {
     this.assertLayerCanAnimate(layer);
-    const binding = bindProperty(layer, property);
+    const binding = bindLayerMotionProperty(layer, property);
     const compiled: CompiledExpression = {
       id: createId('expression'),
       layer,
@@ -286,7 +293,7 @@ export class AnimationController {
       if (layer.locked) continue;
 
       for (const expression of layerExpressions.values()) {
-        const binding = bindProperty(layer, expression.property);
+        const binding = bindLayerMotionProperty(layer, expression.property);
         const context = createExpressionContext(this.composition, layer, expression.property, binding, time, audio);
         try {
           const value = expression.evaluate(context, createExpressionHelpers(time, expression.id));
@@ -328,19 +335,7 @@ export class AnimationController {
     return propertyKeyframes;
   }
 
-  private createTween(
-    binding: PropertyBinding,
-    value: number,
-    options: {
-      duration: number;
-      ease: Easing;
-      hold?: boolean;
-      repeat?: number;
-      yoyo?: boolean;
-      onComplete?: () => void;
-      position: number;
-    },
-  ): TimelineTweenAdapter {
+  private createTween(binding: PropertyBinding, value: number, options: TweenOptions): TimelineTweenAdapter {
     const vars: Record<string, unknown> = {
       [binding.key]: value,
       duration: options.duration,
@@ -368,6 +363,19 @@ export class AnimationController {
     return tween;
   }
 
+  private animateBindings(requests: readonly TweenRequest[], config: AnimationConfig): Animation {
+    assertPositiveDuration(config.duration);
+
+    const tweens: TimelineTweenAdapter[] = [];
+    const position = this.composition.timeline.time() + (config.delay ?? 0);
+
+    for (const request of requests) {
+      tweens.push(this.createTween(request.binding, request.value, createTweenOptions(config, position)));
+    }
+
+    return createAnimation(createId('animation'), tweens);
+  }
+
   private assertLayerCanAnimate(layer: Layer): void {
     if (layer.locked) {
       throw validationError('LAYER_LOCKED', 'Cannot animate a locked layer.', {
@@ -384,6 +392,21 @@ export class AnimationController {
       });
     }
   }
+
+  private rememberBaseline(layer: Layer, property: AnimatableProperty): void {
+    let layerBaselines = this.baselines.get(layer);
+    if (!layerBaselines) {
+      layerBaselines = new Map<AnimatableProperty, number>();
+      this.baselines.set(layer, layerBaselines);
+    }
+    if (!layerBaselines.has(property)) layerBaselines.set(property, readBindingValue(bindLayerMotionProperty(layer, property)));
+  }
+
+  private readBaseline(layer: Layer, property: AnimatableProperty): number {
+    const baseline = this.baselines.get(layer)?.get(property);
+    if (baseline !== undefined) return baseline;
+    return readBindingValue(bindLayerMotionProperty(layer, property));
+  }
 }
 
 export function createAnimationController(composition: Composition): AnimationController {
@@ -399,27 +422,6 @@ export function createExpressionRenderHook(
       controller.applyExpressions(time, getAudio?.());
     },
   };
-}
-
-function bindProperty(layer: Layer, property: AnimatableProperty): PropertyBinding {
-  switch (property) {
-    case 'position.x':
-      return { target: layer.transform.position, key: 'x' };
-    case 'position.y':
-      return { target: layer.transform.position, key: 'y' };
-    case 'rotation':
-      return { target: layer.transform, key: 'rotation' };
-    case 'scale.x':
-      return { target: layer.transform.scale, key: 'x' };
-    case 'scale.y':
-      return { target: layer.transform.scale, key: 'y' };
-    case 'anchor.x':
-      return { target: layer.transform.anchor, key: 'x' };
-    case 'anchor.y':
-      return { target: layer.transform.anchor, key: 'y' };
-    case 'opacity':
-      return { target: layer, key: 'opacity' };
-  }
 }
 
 function compileExpression(source: string): CompiledExpression['evaluate'] {
@@ -485,7 +487,7 @@ function createExpressionHelpers(time: number, expressionId: string): Expression
 }
 
 function readBindingValue(binding: PropertyBinding): number {
-  const value = (binding.target as Record<string, unknown>)[binding.key];
+  const value = readNumericBinding(binding);
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw validationError('EXPRESSION_PROPERTY_NOT_NUMERIC', 'Expression property value must be numeric.', {
       propertyName: binding.key,
@@ -496,7 +498,7 @@ function readBindingValue(binding: PropertyBinding): number {
 }
 
 function writeBindingValue(binding: PropertyBinding, value: number): void {
-  (binding.target as Record<string, number>)[binding.key] = value;
+  writeNumericBinding(binding, value);
 }
 
 function numberExpressionResult(value: unknown, property: AnimatableProperty): number {
@@ -555,6 +557,20 @@ function createAnimation(id: string, tweens: TimelineTweenAdapter[]): Animation 
   };
 }
 
+function createTweenOptions(config: AnimationConfig, position: number): TweenOptions {
+  const options: TweenOptions = {
+    duration: config.duration,
+    ease: config.easing ?? defaultEase,
+    position,
+  };
+
+  if (config.repeat !== undefined) options.repeat = config.repeat;
+  if (config.yoyo !== undefined) options.yoyo = config.yoyo;
+  if (config.onComplete !== undefined) options.onComplete = config.onComplete;
+
+  return options;
+}
+
 function assertPositiveDuration(duration: number): void {
   if (!Number.isFinite(duration) || duration <= 0) {
     throw validationError('INVALID_ANIMATION_DURATION', 'Animation duration must be a positive number.', {
@@ -564,13 +580,43 @@ function assertPositiveDuration(duration: number): void {
   }
 }
 
-function findPreviousKeyframe(keyframes: readonly Keyframe[], time: number): Keyframe | undefined {
-  let previous: Keyframe | undefined;
+function evaluateKeyframes(
+  baseline: number,
+  keyframes: readonly Keyframe[],
+  time: number,
+  parseEase?: (ease: string) => ((progress: number) => number) | undefined,
+): number | undefined {
+  if (keyframes.length === 0) return undefined;
+  const first = keyframes[0];
+  if (first === undefined) return undefined;
+  if (time < first.time) return first.hold ? baseline : interpolateValue(baseline, first.value, time, 0, first.time, first.easing, parseEase);
+
+  let previousValue = baseline;
+  let previousTime = 0;
   for (const keyframe of keyframes) {
-    if (keyframe.time <= time) previous = keyframe;
-    else break;
+    if (time < keyframe.time) {
+      if (keyframe.hold) return previousValue;
+      return interpolateValue(previousValue, keyframe.value, time, previousTime, keyframe.time, keyframe.easing, parseEase);
+    }
+    previousValue = keyframe.value;
+    previousTime = keyframe.time;
   }
-  return previous;
+  return previousValue;
+}
+
+function interpolateValue(
+  start: number,
+  end: number,
+  time: number,
+  startTime: number,
+  endTime: number,
+  easing: Easing,
+  parseEase?: (ease: string) => ((progress: number) => number) | undefined,
+): number {
+  if (endTime <= startTime) return end;
+  const progress = Math.min(Math.max((time - startTime) / (endTime - startTime), 0), 1);
+  const eased = typeof easing === 'function' ? easing(progress) : (parseEase?.(easing)?.(progress) ?? progress);
+  return start + (end - start) * eased;
 }
 
 function insertSorted(keyframes: Keyframe[], keyframe: Keyframe): void {

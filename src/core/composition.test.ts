@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { createAnimationController } from '../animation';
-import type { ScrawlEffectConfig, ScrawlEffectHandle, ScrawlEffectsAdapter } from '../shared/types';
+import type { EffectConfig, EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createComposition } from './composition';
 
 function createFakeEffectsAdapter(): { adapter: ScrawlEffectsAdapter; calls: string[] } {
   const calls: string[] = [];
   let nextFilter = 0;
   const adapter: ScrawlEffectsAdapter = {
-    createEffect(config: ScrawlEffectConfig): ScrawlEffectHandle {
+    createEffect(config: EffectConfig): EffectHandle {
       const id = config.id ?? `filter-${nextFilter}`;
       const filter = {
         name: `${id}-${nextFilter++}`,
@@ -77,8 +77,8 @@ describe('createComposition', () => {
   test('tracks layer source assets and removes owned assets with the layer', () => {
     const calls: string[] = [];
     const composition = createComposition({ width: 100, height: 100 });
-    const image = composition.addImage('/plate.png', { name: 'plate' });
-    const video = composition.addVideo('/clip.mp4', { name: 'clip' });
+    const image = composition.addLayer('image', '/plate.png', { name: 'plate' });
+    const video = composition.addLayer('video', '/clip.mp4', { name: 'clip' });
 
     composition.registerAsset({
       id: `${video.id}:decoded-frame`,
@@ -106,18 +106,46 @@ describe('createComposition', () => {
     expect(calls).toEqual(['dispose-frame']);
   });
 
-  test('exposes high-level layer creation helpers', () => {
+  test('creates all layer variants through addLayer', () => {
     const composition = createComposition({ width: 100, height: 100 });
-    const shape = composition.addShape({ name: 'box', shape: { kind: 'rectangle' } });
-    const text = composition.addText('Hello', { name: 'title' });
-    const audio = composition.addAudio('/voice.wav', { name: 'voice' });
-    const svg = composition.addSvg('/mark.svg', { name: 'mark' });
+    const shape = composition.addLayer('shape', { name: 'box', shape: { kind: 'rectangle' } });
+    const text = composition.addLayer('text', { text: 'Hello', name: 'title' });
+    const audio = composition.addLayer('audio', '/voice.wav', { name: 'voice' });
+    const svg = composition.addLayer('svg', '/mark.svg', { name: 'mark' });
 
     expect(shape.type).toBe('shape');
     expect(text.config.text).toBe('Hello');
     expect(audio.type).toBe('audio');
     expect(svg.type).toBe('svg');
     expect(composition.assets.map((asset) => asset.kind)).toEqual(['audio', 'svg']);
+  });
+
+  test('reorderLayer syncs Scrawl artefact order with composition order', () => {
+    const orders: string[] = [];
+    const composition = createComposition(
+      { width: 100, height: 100 },
+      {
+        createGroup: () => ({ name: 'group', addArtefacts() {}, removeArtefacts() {} }),
+        entityFactories: {
+          shape: (context) => ({
+            name: context.name,
+            type: 'shape',
+            set(values) {
+              if (typeof values['order'] === 'number') orders.push(`${context.name}:${values['order']}`);
+              return this;
+            },
+            kill() {},
+          }),
+        },
+      },
+    );
+    const first = composition.addLayer('shape', { name: 'first' });
+    composition.addLayer('shape', { name: 'second' });
+    orders.length = 0;
+
+    composition.reorderLayer(first, 1);
+
+    expect(orders).toEqual(['second:0', 'first:10']);
   });
 
   test('maps child layers to Scrawl pivot and mimic state', () => {
@@ -496,7 +524,7 @@ describe('createComposition', () => {
       setCalls.push({ ...values });
       return layer.scrawlEntity;
     };
-    composition.addVideo('clip.mp4');
+    composition.addLayer('video', 'clip.mp4');
 
     composition.syncFrame(1.5);
 
@@ -530,7 +558,7 @@ describe('createComposition', () => {
         },
       },
     );
-    composition.addVideo('clip.mp4');
+    composition.addLayer('video', 'clip.mp4');
 
     composition.seek(8);
 

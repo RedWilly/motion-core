@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition, deserializeComposition } from '../core';
-import type { LayerEntityFactoryContext, ScrawlEntityAdapter } from '../shared/types';
+import type { LayerEntityFactoryContext, ScrawlEntityAdapter } from '../shared';
 import {
   hydrateSerializedComposition,
   parseSerializedComposition,
@@ -169,7 +169,7 @@ describe('serialization', () => {
 
   test('hydrates serialized asset ownership without temporary layer ids', () => {
     const original = createComposition({ width: 100, height: 100 });
-    const image = original.addImage('asset.png', { name: 'plate' });
+    const image = original.addLayer('image', 'asset.png', { name: 'plate' });
     original.registerAsset({
       id: 'style:orb-gradient',
       kind: 'style',

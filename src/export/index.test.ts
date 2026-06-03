@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createComposition } from '../core';
-import type { CompositionRuntime, FrameCaptureOptions, RenderAdapter } from '../shared/types';
+import type { CompositionRuntime, FrameCaptureOptions, RenderAdapter } from '../shared';
 import {
   createMediabunnyVideoExportAdapter,
   exportFrame,
