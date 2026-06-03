@@ -78,7 +78,7 @@ async function main() {
   });
 
   const label = composition.addLayer('text', {
-    text: 'motion-core + Scrawl-canvas',
+    text: 'MotionKit + Scrawl-canvas',
     name: 'label',
     transform: { position: { x: 480, y: 420 }, anchor: { x: 0, y: 0 } },
     scrawl: {

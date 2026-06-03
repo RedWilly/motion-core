@@ -77,12 +77,12 @@ export class TimelineSynchronizer {
   private readonly composition: Composition;
   private readonly media: MediaSyncTarget[] = [];
   private readonly hooks: PreRenderHook[] = [];
-  private readonly frameRate: number;
+  private readonly frameRate: number | undefined;
   private readonly onDesync: ((details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void) | undefined;
 
   constructor(composition: Composition, config: TimelineSynchronizerConfig = {}) {
     this.composition = composition;
-    this.frameRate = config.frameRate ?? composition.frameRate;
+    this.frameRate = config.frameRate;
     this.onDesync = config.onDesync;
     if (config.hooks !== undefined) this.hooks.push(...config.hooks);
   }
@@ -109,6 +109,7 @@ export class TimelineSynchronizer {
     this.composition.play();
 
     for (const target of this.media) {
+      if (this.isCompositionMedia(target)) continue;
       void target.play?.();
     }
   }
@@ -117,15 +118,16 @@ export class TimelineSynchronizer {
     this.composition.pause();
 
     for (const target of this.media) {
+      if (this.isCompositionMedia(target)) continue;
       target.pause?.();
     }
   }
 
   async seek(time: number, suppressEvents = true): Promise<void> {
     await synchronizeFrame(this.composition, {
-      time,
-      suppressEvents,
-      frameRate: this.frameRate,
+        time,
+        suppressEvents,
+        frameRate: this.frameRate ?? this.composition.frameRate,
       media: this.media,
       hooks: this.hooks,
       onDesync: this.onDesync,
@@ -135,11 +137,15 @@ export class TimelineSynchronizer {
   async syncFrame(): Promise<void> {
     await synchronizeFrame(this.composition, {
       suppressEvents: true,
-      frameRate: this.frameRate,
+      frameRate: this.frameRate ?? this.composition.frameRate,
       media: this.media,
       hooks: this.hooks,
       onDesync: this.onDesync,
     });
+  }
+
+  private isCompositionMedia(target: MediaSyncTarget): boolean {
+    return this.composition.layers.some((layer) => layer.media === target);
   }
 }
 
@@ -150,14 +156,13 @@ async function synchronizeFrame(
   composition.syncFrame(options.time ?? composition.timeline.time(), options.suppressEvents);
   const syncedTime = composition.timeline.time();
   const tolerance = 1 / options.frameRate;
-
-  for (const target of options.media) {
-    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync, tolerance);
+  const mediaTargets = new Set<MediaSyncTarget>(options.media);
+  for (const layer of composition.layers) {
+    if (layer.media !== undefined) mediaTargets.add(layer.media);
   }
 
-  for (const layer of composition.layers) {
-    const target = layer.media;
-    if (target !== undefined) await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync, tolerance);
+  for (const target of mediaTargets) {
+    await seekMediaTarget(target, syncedTime, options.frameRate, options.onDesync, tolerance);
   }
 
   for (const hook of options.hooks) await hook.beforeRender(syncedTime);

@@ -1,5 +1,5 @@
 import { capabilityError } from '../shared/errors';
-import type { Layer } from '../shared/project';
+import type { CompositionUpdateConfig, Layer } from '../shared/project';
 import type {
   CompositionRuntime,
   EngineAdapters,
@@ -87,6 +87,17 @@ class BrowserScrawlRenderer implements RenderAdapter {
     this.canvas.render();
   }
 
+  configure(composition: CompositionRuntime, changes: Readonly<CompositionUpdateConfig>): void {
+    const values: Record<string, unknown> = {};
+    if (changes.width !== undefined || changes.height !== undefined) {
+      values['dimensions'] = [composition.width, composition.height];
+      this.element.width = composition.width;
+      this.element.height = composition.height;
+    }
+    if (changes.backgroundColor !== undefined) values['backgroundColor'] = composition.backgroundColor;
+    if (Object.keys(values).length > 0) this.canvas.set(values);
+  }
+
   setFrameCallback(callback: (() => void) | null): void {
     this.frameCallback = callback;
   }
@@ -128,7 +139,7 @@ function requireCanvasElement(canvas: HTMLCanvasElement | string): HTMLCanvasEle
   if (element instanceof HTMLCanvasElement) return element;
 
   throw capabilityError(
-    'SCROLL_CANVAS_ELEMENT_MISSING',
+    'SCRAWL_CANVAS_ELEMENT_MISSING',
     `Unable to find canvas element "${canvas}".`,
     'Pass an existing HTMLCanvasElement or an id for a canvas already in the document.',
   );

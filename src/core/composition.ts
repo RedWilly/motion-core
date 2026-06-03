@@ -6,6 +6,7 @@ import { createId } from '../shared/ids';
 import type {
   Composition,
   CompositionConfig,
+  CompositionUpdateConfig,
   Layer,
   LayerEffectState,
   LayerMaskConfig,
@@ -26,6 +27,7 @@ import type {
 import type { CompositionRuntime, EngineAdapters, RenderAdapter } from '../shared/runtime';
 import {
   normalizeCompositionConfig,
+  normalizeCompositionUpdate,
   normalizeLayerEffects,
   normalizeEffectConfig,
   normalizeMaskConfig,
@@ -65,6 +67,7 @@ interface CompositionInternals {
 }
 
 const compositionInternals = new WeakMap<Composition, CompositionInternals>();
+const precompositionOwners = new WeakMap<Composition, Layer>();
 
 function mergeTransform(transform?: Partial<Transform>): Transform {
   const position = transform?.position;
@@ -133,7 +136,7 @@ export function createComposition(
   config: CompositionConfig,
   adapters: EngineAdapters = {},
 ): Composition {
-  const normalized = normalizeCompositionConfig(config);
+  let normalized = normalizeCompositionConfig(config);
   const id = createId('composition');
   const timeline = adapters.createTimeline?.(normalized.duration) ?? new MemoryTimeline(normalized.duration);
   let activeGroup = adapters.createGroup?.(normalized.name);
@@ -147,6 +150,7 @@ export function createComposition(
     name: normalized.name,
     width: normalized.width,
     height: normalized.height,
+    backgroundColor: normalized.backgroundColor,
     layers: [],
     assets: assets.items,
     timeline,
@@ -194,9 +198,14 @@ export function createComposition(
       motionTargets.remove(layer.shape.stroke);
     }
     if (layer.textState !== undefined) motionTargets.remove(layer.textState);
+    if (layer.precomposition !== null && precompositionOwners.get(layer.precomposition) === layer) {
+      compositionInternals.get(layer.precomposition)?.setHostGroup(undefined);
+      precompositionOwners.delete(layer.precomposition);
+    }
     layer.media?.pause?.();
     layer.media?.dispose?.();
     delete layer.media;
+    layer.scrawlCell?.kill?.();
     assets.removeOwnedByLayer(layer);
     activeGroup?.removeArtefacts?.(...layerArtefacts(layer));
     layer.scrawlEntity.kill?.();
@@ -213,16 +222,54 @@ export function createComposition(
 
   const composition = {
     id,
-    name: normalized.name,
-    width: normalized.width,
-    height: normalized.height,
-    duration: normalized.duration,
-    frameRate: normalized.frameRate,
-    backgroundColor: normalized.backgroundColor,
+    get name() {
+      return normalized.name;
+    },
+    get width() {
+      return normalized.width;
+    },
+    get height() {
+      return normalized.height;
+    },
+    get duration() {
+      return normalized.duration;
+    },
+    get frameRate() {
+      return normalized.frameRate;
+    },
+    get backgroundColor() {
+      return normalized.backgroundColor;
+    },
     layers: runtime.layers,
     assets: runtime.assets,
     timeline,
     renderer,
+
+    configure(update: CompositionUpdateConfig): void {
+      const next = normalizeCompositionUpdate(normalized, update);
+      const changes: CompositionUpdateConfig = {};
+      if (next.width !== normalized.width) changes.width = next.width;
+      if (next.height !== normalized.height) changes.height = next.height;
+      if (next.duration !== normalized.duration) changes.duration = next.duration;
+      if (next.frameRate !== normalized.frameRate) changes.frameRate = next.frameRate;
+      if (next.backgroundColor !== normalized.backgroundColor) changes.backgroundColor = next.backgroundColor;
+      if (next.name !== normalized.name) changes.name = next.name;
+      if (Object.keys(changes).length === 0) return;
+
+      normalized = next;
+      if (changes.name !== undefined) runtime.name = next.name;
+      if (changes.width !== undefined || changes.height !== undefined) {
+        runtime.width = next.width;
+        runtime.height = next.height;
+        for (const layer of runtime.layers) layer.mask?.scrawlCell?.set({ dimensions: [next.width, next.height] });
+      }
+      if (changes.backgroundColor !== undefined) runtime.backgroundColor = next.backgroundColor;
+      if (changes.duration !== undefined) {
+        timeline.duration(next.duration);
+        if (timeline.time() > next.duration) this.syncFrame(next.duration);
+      }
+      renderer.configure?.(runtime, changes);
+    },
 
     addLayer(type: LayerType, sourceOrConfig?: string | LayerConfig, config?: LayerConfig): Layer {
       const { source, config: layerConfig } = normalizeAddLayerArgs(sourceOrConfig, config);
@@ -299,6 +346,9 @@ export function createComposition(
       if (childComposition.id === id || containsPrecomposition(childComposition, composition)) {
         throw new Error('Precomposition circular reference detected.');
       }
+      if (precompositionOwners.has(childComposition)) {
+        throw new Error('Composition is already mounted as a precomposition.');
+      }
 
       const precompConfig: PrecompositionLayerConfig = {
         composition: childComposition,
@@ -309,6 +359,7 @@ export function createComposition(
         ...layerConfig,
         precomp: precompConfig,
       });
+      precompositionOwners.set(childComposition, layer);
 
       if (layer.scrawlCell !== undefined) {
         layer.source = layer.scrawlCell.name;
@@ -508,11 +559,13 @@ export function createComposition(
       if (group === activeGroup) return;
       const previousGroup = activeGroup;
       activeGroup = group;
-      if (group === undefined) delete runtime.group;
-      else {
-        runtime.group = group;
-        moveLayersIntoGroup(runtime.layers, group, previousGroup);
+      if (group === undefined) {
+        delete runtime.group;
+        for (const layer of runtime.layers) previousGroup?.removeArtefacts?.(...layerArtefacts(layer));
+        return;
       }
+      runtime.group = group;
+      moveLayersIntoGroup(runtime.layers, group, previousGroup);
     },
   });
 

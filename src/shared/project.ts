@@ -51,6 +51,8 @@ export interface CompositionConfig {
   name?: string;
 }
 
+export type CompositionUpdateConfig = Partial<CompositionConfig>;
+
 export interface LayerConfig {
   name?: string;
   transform?: Partial<Transform>;
@@ -235,17 +237,18 @@ export interface LayerMaskState extends Required<Pick<MaskConfig, 'mode'>> {
 }
 
 export interface Composition {
-  id: string;
-  name: string;
-  width: number;
-  height: number;
-  duration: number;
-  frameRate: number;
-  backgroundColor: string;
-  layers: Layer[];
-  assets: CompositionAsset[];
-  timeline: TimelineAdapter;
-  renderer: RenderAdapter;
+  readonly id: string;
+  readonly name: string;
+  readonly width: number;
+  readonly height: number;
+  readonly duration: number;
+  readonly frameRate: number;
+  readonly backgroundColor: string;
+  readonly layers: Layer[];
+  readonly assets: CompositionAsset[];
+  readonly timeline: TimelineAdapter;
+  readonly renderer: RenderAdapter;
+  configure(config: CompositionUpdateConfig): void;
   addLayer(type: LayerType, config?: LayerConfig): Layer;
   addLayer(type: LayerType, source?: string, config?: LayerConfig): Layer;
   addPrecomposition(composition: Composition, config?: Omit<LayerConfig, 'content' | 'precomp'> & {

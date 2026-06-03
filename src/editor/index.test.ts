@@ -30,7 +30,7 @@ class FakeInput implements LiveEditInput {
 }
 
 describe('LiveEditSession', () => {
-  test('binds input changes to motion-core state and batches sync/render work', () => {
+  test('binds input changes to MotionKit state and batches sync/render work', () => {
     const events: string[] = [];
     const composition = createComposition(
       { width: 100, height: 100 },
