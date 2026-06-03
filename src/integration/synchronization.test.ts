@@ -93,6 +93,12 @@ describe('TimelineSynchronizer', () => {
     await sync.seek(1);
 
     expect(warnings).toEqual(['outside']);
+
+    warnings.length = 0;
+    composition.configure({ frameRate: 120 });
+    await sync.seek(2);
+
+    expect(warnings).toEqual(['within', 'outside']);
   });
 
   test('removes media targets without leaving stale sync work', async () => {

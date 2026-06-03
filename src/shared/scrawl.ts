@@ -205,7 +205,7 @@ export interface ScrawlFilterAdapter {
 export interface ScrawlCellAdapter {
   readonly name: string;
   getGroup?(): ScrawlGroupAdapter;
-  set?(values: Readonly<Record<string, unknown>>): unknown;
+  set(values: Readonly<Record<string, unknown>>): unknown;
   kill?(): unknown;
   render?(): unknown;
   compile?(): unknown;

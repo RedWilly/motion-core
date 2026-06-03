@@ -11,6 +11,7 @@ function createFakeScrawl() {
     halt: 0,
     renderKill: 0,
     buildCell: '',
+    canvasSet: [] as Array<Readonly<Record<string, unknown>>>,
     purge: '',
     currentCanvas: '',
     groupHost: '',
@@ -20,7 +21,8 @@ function createFakeScrawl() {
 	  const canvas = {
     name: 'canvas-a',
     base: { name: 'canvas-a-base' },
-    set() {
+    set(values: Readonly<Record<string, unknown>>) {
+      calls.canvasSet.push(values);
       return this;
     },
 	    render() {
@@ -172,6 +174,7 @@ describe('createBrowserScrawlAdapter', () => {
     composition.addPrecomposition(createComposition({ width: 20, height: 10, name: 'child' }), { name: 'nested' });
     composition.play();
     composition.seek(0);
+    composition.configure({ width: 160, height: 90, backgroundColor: '#111111' });
     composition.pause();
     adapter.dispose();
 
@@ -185,6 +188,9 @@ describe('createBrowserScrawlAdapter', () => {
     expect(calls.run).toBe(1);
     expect(calls.halt).toBe(1);
     expect(calls.renderFrame).toBe(1);
+    expect(calls.canvasSet).toContainEqual({ dimensions: [160, 90], backgroundColor: '#111111' });
+    expect(htmlCanvas.width).toBe(160);
+    expect(htmlCanvas.height).toBe(90);
     expect(calls.renderKill).toBe(1);
     expect(calls.purge).toBe('spec');
   });

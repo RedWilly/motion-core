@@ -1,5 +1,5 @@
 import { capabilityError } from '../shared/errors';
-import type { Layer } from '../shared/project';
+import type { CompositionUpdateConfig, Layer } from '../shared/project';
 import type {
   CompositionRuntime,
   EngineAdapters,
@@ -85,6 +85,17 @@ class BrowserScrawlRenderer implements RenderAdapter {
 
   renderFrame(): void {
     this.canvas.render();
+  }
+
+  configure(composition: CompositionRuntime, changes: Readonly<CompositionUpdateConfig>): void {
+    const values: Record<string, unknown> = {};
+    if (changes.width !== undefined || changes.height !== undefined) {
+      values['dimensions'] = [composition.width, composition.height];
+      this.element.width = composition.width;
+      this.element.height = composition.height;
+    }
+    if (changes.backgroundColor !== undefined) values['backgroundColor'] = composition.backgroundColor;
+    if (Object.keys(values).length > 0) this.canvas.set(values);
   }
 
   setFrameCallback(callback: (() => void) | null): void {

@@ -63,6 +63,47 @@ describe('createComposition', () => {
     );
   });
 
+  test('reconfigures composition-owned settings without touching unchanged runtime state', () => {
+    const durationUpdates: number[] = [];
+    let currentTime = 0;
+    const composition = createComposition(
+      { width: 100, height: 100, duration: 5, frameRate: 30, name: 'main' },
+      {
+        createTimeline(duration) {
+          let timelineDuration = duration;
+          return {
+            play() {},
+            pause() {},
+            seek(time) {
+              currentTime = Math.min(Math.max(time, 0), timelineDuration);
+            },
+            time: () => currentTime,
+            duration(value?: number) {
+              if (value !== undefined) {
+                durationUpdates.push(value);
+                timelineDuration = value;
+              }
+              return timelineDuration;
+            },
+          };
+        },
+      },
+    );
+
+    composition.seek(4);
+    composition.configure({ width: 120, height: 80, frameRate: 60 });
+    composition.configure({ width: 120, height: 80, frameRate: 60 });
+    composition.configure({ duration: 2, name: 'renamed' });
+
+    expect(composition.width).toBe(120);
+    expect(composition.height).toBe(80);
+    expect(composition.frameRate).toBe(60);
+    expect(composition.duration).toBe(2);
+    expect(composition.name).toBe('renamed');
+    expect(composition.timeline.time()).toBe(2);
+    expect(durationUpdates).toEqual([2]);
+  });
+
   test('removes child layers when a parent is removed', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const parent = composition.addLayer('shape');
@@ -394,6 +435,10 @@ describe('createComposition', () => {
             getGroup() {
               return cellGroup;
             },
+            set(values) {
+              maskCellCalls.push(`set:${JSON.stringify(values)}`);
+              return this;
+            },
             kill() {
               maskCellCalls.push('kill-cell');
             },
@@ -417,6 +462,8 @@ describe('createComposition', () => {
       `move:${target.scrawlEntity.name}`,
       `move:${matte.scrawlEntity.name}`,
     ]);
+    composition.configure({ width: 160, height: 90 });
+    expect(maskCellCalls).toContain('set:{"dimensions":[160,90]}');
 
     composition.clearMask(target);
     expect(target.mask).toBeNull();

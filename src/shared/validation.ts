@@ -1,6 +1,7 @@
 import { validationError } from './errors';
 import type {
   CompositionConfig,
+  CompositionUpdateConfig,
   LayerEffectState,
   LayerMaskConfig,
   LayerMaskState,
@@ -84,6 +85,20 @@ export function normalizeCompositionConfig(config: CompositionConfig): Normalize
   assertFrameRate(normalized.frameRate);
 
   return normalized;
+}
+
+export function normalizeCompositionUpdate(
+  current: NormalizedCompositionConfig,
+  config: CompositionUpdateConfig,
+): NormalizedCompositionConfig {
+  return normalizeCompositionConfig({
+    width: config.width ?? current.width,
+    height: config.height ?? current.height,
+    duration: config.duration ?? current.duration,
+    frameRate: config.frameRate ?? current.frameRate,
+    backgroundColor: config.backgroundColor ?? current.backgroundColor,
+    name: config.name ?? current.name,
+  });
 }
 
 export function normalizeEffectConfig(

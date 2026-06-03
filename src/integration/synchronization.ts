@@ -77,12 +77,12 @@ export class TimelineSynchronizer {
   private readonly composition: Composition;
   private readonly media: MediaSyncTarget[] = [];
   private readonly hooks: PreRenderHook[] = [];
-  private readonly frameRate: number;
+  private readonly frameRate: number | undefined;
   private readonly onDesync: ((details: { target: MediaSyncTarget; timelineTime: number; mediaTime: number }) => void) | undefined;
 
   constructor(composition: Composition, config: TimelineSynchronizerConfig = {}) {
     this.composition = composition;
-    this.frameRate = config.frameRate ?? composition.frameRate;
+    this.frameRate = config.frameRate;
     this.onDesync = config.onDesync;
     if (config.hooks !== undefined) this.hooks.push(...config.hooks);
   }
@@ -125,9 +125,9 @@ export class TimelineSynchronizer {
 
   async seek(time: number, suppressEvents = true): Promise<void> {
     await synchronizeFrame(this.composition, {
-      time,
-      suppressEvents,
-      frameRate: this.frameRate,
+        time,
+        suppressEvents,
+        frameRate: this.frameRate ?? this.composition.frameRate,
       media: this.media,
       hooks: this.hooks,
       onDesync: this.onDesync,
@@ -137,7 +137,7 @@ export class TimelineSynchronizer {
   async syncFrame(): Promise<void> {
     await synchronizeFrame(this.composition, {
       suppressEvents: true,
-      frameRate: this.frameRate,
+      frameRate: this.frameRate ?? this.composition.frameRate,
       media: this.media,
       hooks: this.hooks,
       onDesync: this.onDesync,

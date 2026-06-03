@@ -1,4 +1,4 @@
-import type { Composition, CompositionAsset, Layer, LayerMaskState } from './project';
+import type { Composition, CompositionAsset, CompositionUpdateConfig, Layer, LayerMaskState } from './project';
 import type {
   LayerEntityFactory,
   ScrawlCellAdapter,
@@ -27,6 +27,7 @@ export interface RenderAdapter {
   play(): void;
   pause(): void;
   renderFrame(): void | Promise<void>;
+  configure?(composition: CompositionRuntime, changes: Readonly<CompositionUpdateConfig>): void;
   setFrameCallback?(callback: (() => void) | null): void;
   captureFrame?(options: Readonly<FrameCaptureOptions>): Promise<Blob>;
   getFrameCanvas?(): HTMLCanvasElement | OffscreenCanvas;
@@ -89,6 +90,7 @@ export interface CompositionRuntime {
   name: string;
   width: number;
   height: number;
+  backgroundColor: string;
   group?: ScrawlGroupAdapter;
   layers: Layer[];
   assets: CompositionAsset[];
