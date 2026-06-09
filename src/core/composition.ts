@@ -7,12 +7,16 @@ import type {
   Composition,
   CompositionConfig,
   CompositionUpdateConfig,
+  AnimatableProperty,
+  LiveEditBindingOptions,
+  LiveEditInput,
   Layer,
   LayerEffectState,
   LayerMaskConfig,
   LayerMaskState,
   LayerConfig,
   LayerType,
+  MotionSetOptions,
   PrecompositionLayerConfig,
   Transform,
 } from '../shared/project';
@@ -53,6 +57,7 @@ import {
 import { createShapeState, createTextState } from './layer-state';
 import { createVideoMediaTarget } from './media-targets';
 import { MotionTargetRegistry } from './motion-targets';
+import { getMotionController } from './motion';
 
 const defaultPositionX = 0;
 const defaultPositionY = 0;
@@ -220,7 +225,7 @@ export function createComposition(
     });
   };
 
-  const composition = {
+  const composition: Composition = {
     id,
     get name() {
       return normalized.name;
@@ -439,6 +444,63 @@ export function createComposition(
 
     removeAsset: (asset) => assets.remove(asset),
 
+    addKeyframe: (layer, property, time, value, config) =>
+      getMotionController(composition).addKeyframe(layer, property, time, value, config),
+
+    editKeyframe: (layer, property, time, value, config) =>
+      getMotionController(composition).editKeyframe(layer, property, time, value, config),
+
+    key: (layer, property, time, value, config) =>
+      getMotionController(composition).key(layer, property, time, value, config),
+
+    findKeyframe: (layer, property, time) =>
+      getMotionController(composition).findKeyframe(layer, property, time),
+
+    removeKeyframe: (layer, keyframe) =>
+      getMotionController(composition).removeKeyframe(layer, keyframe),
+
+    animate: (layer, values, config) =>
+      getMotionController(composition).animate(layer, values, config),
+
+    animateTarget: (target, values, config) =>
+      getMotionController(composition).animateTarget(target, values, config),
+
+    set: (
+      target: Layer | Record<string, number>,
+      property: AnimatableProperty | string,
+      value: number,
+      options?: MotionSetOptions,
+    ): void => {
+      getMotionController(composition).set(target as never, property as never, value, options);
+    },
+
+    bind: (
+      input: LiveEditInput,
+      target: Layer | Record<string, number>,
+      property: AnimatableProperty | string,
+      options?: LiveEditBindingOptions,
+    ) =>
+      getMotionController(composition).bind(input, target as never, property as never, options),
+
+    setExpression: (layer, property, evaluator) =>
+      getMotionController(composition).setExpression(layer, property, evaluator),
+
+    removeExpression: (layer, property) =>
+      getMotionController(composition).removeExpression(layer, property),
+
+    applyExpressions: (time, audio) =>
+      getMotionController(composition).applyExpressions(time, audio),
+
+    getExpressionErrors: () =>
+      getMotionController(composition).getExpressionErrors(),
+
+    removeAnimationsForLayer: (layer) =>
+      getMotionController(composition).removeAnimationsForLayer(layer),
+
+    flush: () => {
+      getMotionController(composition).flush();
+    },
+
     registerMotionTarget: (target) => motionTargets.register(target),
 
     applyMotionTargets: () => motionTargets.apply(),
@@ -540,7 +602,7 @@ export function createComposition(
     serialize(): string {
       return serializeComposition(this);
     },
-  } satisfies Composition;
+  };
 
   const syncLiveFrame = (): void => {
     if (livePlayback.running) {

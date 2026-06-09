@@ -20,10 +20,10 @@ const expectedTopLevelModules = new Set([
 ]);
 
 const allowedProductionDependencies = new Map<string, ReadonlySet<string>>([
-  ['animation', new Set(['integration', 'shared'])],
+  ['animation', new Set(['core', 'shared'])],
   ['audio', new Set(['shared'])],
   ['core', new Set(['integration', 'shared'])],
-  ['editor', new Set(['animation', 'shared'])],
+  ['editor', new Set(['core', 'shared'])],
   ['export', new Set(['integration', 'shared'])],
   ['integration', new Set(['shared'])],
   ['public', new Set(['animation', 'audio', 'core', 'editor', 'export', 'integration', 'shared'])],
