@@ -572,7 +572,7 @@ export function createLiveEditSession(
 }
 
 export function createExpressionRenderHook(
-  controller: AnimationController,
+  controller: Pick<AnimationController, 'applyExpressions'>,
   getAudio?: ExpressionAudioProvider,
 ): PreRenderHook {
   return {

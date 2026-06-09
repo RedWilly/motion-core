@@ -1,8 +1,6 @@
 import {
   blur,
-  createAnimationController,
   createComposition,
-  createLiveEditSession,
   createGsapTimelineFactory,
   loadBrowserScrawlAdapter,
 } from '../../dist/index.js';
@@ -111,17 +109,15 @@ async function main() {
     },
   });
 
-  const editor = createLiveEditSession(composition);
-  const animation = createAnimationController(composition);
   const blurEffect = shape.effects[0];
   const fill = shape.shape?.fill;
   const stroke = shape.shape?.stroke;
 
-  animation.addKeyframe(shape, 'position.x', 0, 260);
-  animation.addKeyframe(shape, 'position.x', 4, 700, { easing: 'power2.inOut' });
-  animation.addKeyframe(shape, 'rotation', 0, 0);
-  animation.addKeyframe(shape, 'rotation', 4, 360, { easing: 'power1.inOut' });
-  animation.animate(label, { 'position.y': 404 }, {
+  composition.addKeyframe(shape, 'position.x', 0, 260);
+  composition.addKeyframe(shape, 'position.x', 4, 700, { easing: 'power2.inOut' });
+  composition.addKeyframe(shape, 'rotation', 0, 0);
+  composition.addKeyframe(shape, 'rotation', 4, 360, { easing: 'power1.inOut' });
+  composition.animate(label, { 'position.y': 404 }, {
     duration: 1.2,
     repeat: -1,
     yoyo: true,
@@ -129,12 +125,12 @@ async function main() {
   });
 
   const editOptions = () => autoKeyInput?.checked
-    ? { mode: 'autoKey', animation, time: composition.timeline.time() }
+    ? { mode: 'autoKey', time: composition.timeline.time() }
     : { mode: 'set' };
 
   function bindLayerControl(input, property) {
     input.addEventListener('input', () => {
-      editor.setLayerProperty(shape, property, numberInput(input), {
+      composition.set(shape, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -144,7 +140,7 @@ async function main() {
 
   function bindEffectControl(input, effect, key) {
     input.addEventListener('input', () => {
-      editor.setValue(effect.values, key, numberInput(input), {
+      composition.set(effect.values, key, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -155,7 +151,7 @@ async function main() {
   function bindShapeFillControl(input, property) {
     input.addEventListener('input', () => {
       if (shape.shape?.fill === undefined) return;
-      editor.setValue(shape.shape.fill.values, property, numberInput(input), {
+      composition.set(shape.shape.fill.values, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -166,7 +162,7 @@ async function main() {
   function bindShapeStrokeControl(input, property) {
     input.addEventListener('input', () => {
       if (shape.shape?.stroke === undefined) return;
-      editor.setValue(shape.shape.stroke.values, property, numberInput(input), {
+      composition.set(shape.shape.stroke.values, property, numberInput(input), {
         ...editOptions(),
         render: true,
       });
@@ -227,19 +223,19 @@ async function main() {
   });
 
   function addKeysAt(time) {
-    animation.addKeyframe(shape, 'position.x', time, numberInput(controls.x));
-    animation.addKeyframe(shape, 'position.y', time, numberInput(controls.y));
-    animation.addKeyframe(shape, 'rotation', time, numberInput(controls.rotation));
-    animation.addKeyframe(shape, 'scale.x', time, numberInput(controls.scale));
-    animation.addKeyframe(shape, 'opacity', time, numberInput(controls.opacity));
+    composition.addKeyframe(shape, 'position.x', time, numberInput(controls.x));
+    composition.addKeyframe(shape, 'position.y', time, numberInput(controls.y));
+    composition.addKeyframe(shape, 'rotation', time, numberInput(controls.rotation));
+    composition.addKeyframe(shape, 'scale.x', time, numberInput(controls.scale));
+    composition.addKeyframe(shape, 'opacity', time, numberInput(controls.opacity));
   }
 
   function editKeysAt(time) {
-    animation.editKeyframe(shape, 'position.x', time, numberInput(controls.x));
-    animation.editKeyframe(shape, 'position.y', time, numberInput(controls.y));
-    animation.editKeyframe(shape, 'rotation', time, numberInput(controls.rotation));
-    animation.editKeyframe(shape, 'scale.x', time, numberInput(controls.scale));
-    animation.editKeyframe(shape, 'opacity', time, numberInput(controls.opacity));
+    composition.editKeyframe(shape, 'position.x', time, numberInput(controls.x));
+    composition.editKeyframe(shape, 'position.y', time, numberInput(controls.y));
+    composition.editKeyframe(shape, 'rotation', time, numberInput(controls.rotation));
+    composition.editKeyframe(shape, 'scale.x', time, numberInput(controls.scale));
+    composition.editKeyframe(shape, 'opacity', time, numberInput(controls.opacity));
   }
 
   function seekTo(time) {
