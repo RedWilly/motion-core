@@ -136,6 +136,27 @@ describe('LiveEditSession', () => {
     expect(layer.scrawlState.startX).toBe(32);
   });
 
+  test('disposing a live edit session does not remove composition-owned bindings', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('shape');
+    const compositionInput = new FakeInput('24');
+    const sessionInput = new FakeInput('9');
+    const values = { x: 0 };
+
+    composition.bind(compositionInput, layer, 'position.x', { render: false });
+    const session = createLiveEditSession(composition);
+    session.bindInput(sessionInput, values, 'x');
+
+    session.dispose();
+    sessionInput.emit('input');
+    compositionInput.emit('input');
+    composition.flush();
+
+    expect(values.x).toBe(0);
+    expect(layer.transform.position.x).toBe(24);
+    expect(layer.scrawlState.startX).toBe(24);
+  });
+
   test('binds layer motion properties through the same property map as animation', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const layer = composition.addLayer('shape', {

@@ -598,8 +598,6 @@ export function createLiveEditSession(
   composition: Composition,
   options: LiveEditSessionOptions = {},
 ): LiveEditSession {
-  const existing = motionControllers.get(composition);
-  if (existing !== undefined && options.schedule === undefined && options.render === undefined) return existing;
   return new AnimationController(composition, options, false);
 }
 
