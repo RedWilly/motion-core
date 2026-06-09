@@ -123,6 +123,19 @@ describe('LiveEditSession', () => {
     expect(events).toEqual(['cancel']);
   });
 
+  test('disposing the default live edit session does not disable composition-owned motion APIs', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('shape');
+    const session = createLiveEditSession(composition);
+
+    session.dispose();
+    composition.set(layer, 'position.x', 32, { render: false });
+    composition.flush();
+
+    expect(layer.transform.position.x).toBe(32);
+    expect(layer.scrawlState.startX).toBe(32);
+  });
+
   test('binds layer motion properties through the same property map as animation', () => {
     const composition = createComposition({ width: 100, height: 100 });
     const layer = composition.addLayer('shape', {

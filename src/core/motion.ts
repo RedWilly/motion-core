@@ -76,17 +76,20 @@ export class AnimationController implements MotionStateTarget, LiveEditSession {
   private readonly bindings: LiveEditBinding[] = [];
   private readonly schedule: (callback: () => void) => () => void;
   private readonly defaultRender: boolean;
+  private readonly compositionOwned: boolean;
+  private readonly unregisterMotionTarget: () => void;
   private pendingCancel: (() => void) | null = null;
   private pending = false;
   private disposed = false;
   private renderPending = false;
 
-  constructor(composition: Composition, options: LiveEditSessionOptions = {}) {
+  constructor(composition: Composition, options: LiveEditSessionOptions = {}, compositionOwned = true) {
     this.composition = composition;
     this.schedule = options.schedule ?? defaultSchedule;
     this.defaultRender = options.render ?? true;
-    this.composition.registerMotionTarget(this);
-    if (!motionControllers.has(composition)) motionControllers.set(composition, this);
+    this.compositionOwned = compositionOwned;
+    this.unregisterMotionTarget = this.composition.registerMotionTarget(this);
+    if (compositionOwned && !motionControllers.has(composition)) motionControllers.set(composition, this);
   }
 
   addKeyframe(
@@ -437,13 +440,16 @@ export class AnimationController implements MotionStateTarget, LiveEditSession {
   }
 
   dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
+    if (this.disposed && !this.compositionOwned) return;
     this.pendingCancel?.();
     this.pending = false;
     this.pendingCancel = null;
     this.renderPending = false;
     while (this.bindings.length > 0) this.bindings.pop()?.dispose();
+    if (!this.compositionOwned) {
+      this.disposed = true;
+      this.unregisterMotionTarget();
+    }
   }
 
   private getPropertyKeyframes(layer: Layer, property: AnimatableProperty): Keyframe[] {
@@ -568,7 +574,7 @@ export function createLiveEditSession(
 ): LiveEditSession {
   const existing = motionControllers.get(composition);
   if (existing !== undefined && options.schedule === undefined && options.render === undefined) return existing;
-  return new AnimationController(composition, options);
+  return new AnimationController(composition, options, false);
 }
 
 export function createExpressionRenderHook(

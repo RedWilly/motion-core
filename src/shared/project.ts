@@ -160,7 +160,7 @@ export type LiveEditMode = 'set' | 'autoKey';
 
 export interface LiveEditOptions {
   readonly mode?: LiveEditMode;
-  readonly animation?: Pick<MotionCommands, 'editKeyframe'>;
+  readonly animation?: Pick<MotionKeyframes, 'editKeyframe'>;
   readonly keyframe?: KeyframeConfig;
   readonly time?: number;
 }
@@ -181,19 +181,25 @@ export interface MotionSetOptions extends LiveEditOptions {
   readonly render?: boolean;
 }
 
-export interface MotionCommands {
-  readonly values: Record<string, number>;
+export interface MotionKeyframes {
   addKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
   editKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
   key(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
   findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined;
   removeKeyframe(layer: Layer, keyframe: Keyframe): void;
+}
+
+export interface MotionPlayback {
   animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation;
   animateTarget<TValues extends Record<string, number>>(
     target: MotionStateTarget<TValues>,
     values: MotionTargetValues<TValues>,
     config: AnimationConfig,
   ): Animation;
+  removeAnimationsForLayer(layer: Layer): void;
+}
+
+export interface MotionSet {
   set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
   set<TKey extends string>(
     values: Record<TKey, number>,
@@ -201,6 +207,9 @@ export interface MotionCommands {
     value: number,
     options?: MotionSetOptions,
   ): void;
+}
+
+export interface MotionBindings {
   bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
   bind<TKey extends string>(
     input: LiveEditInput,
@@ -208,16 +217,34 @@ export interface MotionCommands {
     key: TKey,
     options?: LiveEditBindingOptions,
   ): () => void;
+}
+
+export interface MotionExpressions {
   setExpression(layer: Layer, property: AnimatableProperty, evaluator: ExpressionEvaluator): Expression;
   removeExpression(layer: Layer, property: AnimatableProperty): void;
   applyExpressions(time?: number, audio?: ExpressionAudioContext): ExpressionApplyResult;
   getExpressionErrors(): readonly EngineError[];
-  removeAnimationsForLayer(layer: Layer): void;
+}
+
+export interface MotionFlush {
   flush(): void;
+}
+
+export interface MotionLifecycle extends MotionFlush {
   dispose(): void;
 }
 
-export interface LiveEditSession {
+export interface MotionCommands
+  extends MotionKeyframes,
+    MotionPlayback,
+    MotionSet,
+    MotionBindings,
+    MotionExpressions,
+    MotionLifecycle {
+  readonly values: Record<string, number>;
+}
+
+export interface LiveEditSession extends MotionBindings, MotionSet, MotionLifecycle {
   bindInput<TKey extends string>(
     input: LiveEditInput,
     values: Record<TKey, number>,
@@ -242,22 +269,6 @@ export interface LiveEditSession {
     value: number,
     options?: MotionSetOptions,
   ): void;
-  bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
-  bind<TKey extends string>(
-    input: LiveEditInput,
-    values: Record<TKey, number>,
-    key: TKey,
-    options?: LiveEditBindingOptions,
-  ): () => void;
-  set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
-  set<TKey extends string>(
-    values: Record<TKey, number>,
-    key: TKey,
-    value: number,
-    options?: MotionSetOptions,
-  ): void;
-  flush(): void;
-  dispose(): void;
 }
 
 export type CompositionUpdateConfig = Partial<CompositionConfig>;
@@ -445,7 +456,13 @@ export interface LayerMaskState extends Required<Pick<MaskConfig, 'mode'>> {
   scrawlCell?: ScrawlCellAdapter;
 }
 
-export interface Composition {
+export interface Composition
+  extends MotionKeyframes,
+    MotionPlayback,
+    MotionSet,
+    MotionBindings,
+    MotionExpressions,
+    MotionFlush {
   readonly id: string;
   readonly name: string;
   readonly width: number;
@@ -472,37 +489,6 @@ export interface Composition {
   removeStyle(style: MotionStyle): void;
   registerAsset(asset: CompositionAsset): CompositionAsset;
   removeAsset(asset: CompositionAsset | string): void;
-  addKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
-  editKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
-  key(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
-  findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined;
-  removeKeyframe(layer: Layer, keyframe: Keyframe): void;
-  animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation;
-  animateTarget<TValues extends Record<string, number>>(
-    target: MotionStateTarget<TValues>,
-    values: MotionTargetValues<TValues>,
-    config: AnimationConfig,
-  ): Animation;
-  set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
-  set<TKey extends string>(
-    values: Record<TKey, number>,
-    key: TKey,
-    value: number,
-    options?: MotionSetOptions,
-  ): void;
-  bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
-  bind<TKey extends string>(
-    input: LiveEditInput,
-    values: Record<TKey, number>,
-    key: TKey,
-    options?: LiveEditBindingOptions,
-  ): () => void;
-  setExpression(layer: Layer, property: AnimatableProperty, evaluator: ExpressionEvaluator): Expression;
-  removeExpression(layer: Layer, property: AnimatableProperty): void;
-  applyExpressions(time?: number, audio?: ExpressionAudioContext): ExpressionApplyResult;
-  getExpressionErrors(): readonly EngineError[];
-  removeAnimationsForLayer(layer: Layer): void;
-  flush(): void;
   registerMotionTarget(target: MotionStateTarget): () => void;
   applyMotionTargets(): void;
   syncFrame(time?: number, suppressEvents?: boolean): void;
