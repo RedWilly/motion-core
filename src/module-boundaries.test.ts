@@ -5,14 +5,12 @@ import { basename, join, relative, sep } from 'node:path';
 const root = join(import.meta.dir);
 const workspaceRoot = join(root, '..');
 const maxDependenciesPerModule = 3;
-const maxTopLevelModules = 8;
+const maxTopLevelModules = 6;
 const maxModuleEntrypointExports = 10;
 const supportModules = new Set(['shared']);
 const expectedTopLevelModules = new Set([
-  'animation',
   'audio',
   'core',
-  'editor',
   'export',
   'integration',
   'public',
@@ -20,13 +18,11 @@ const expectedTopLevelModules = new Set([
 ]);
 
 const allowedProductionDependencies = new Map<string, ReadonlySet<string>>([
-  ['animation', new Set(['core', 'shared'])],
   ['audio', new Set(['shared'])],
   ['core', new Set(['integration', 'shared'])],
-  ['editor', new Set(['core', 'shared'])],
   ['export', new Set(['integration', 'shared'])],
   ['integration', new Set(['shared'])],
-  ['public', new Set(['animation', 'audio', 'core', 'editor', 'export', 'integration', 'shared'])],
+  ['public', new Set(['audio', 'core', 'export', 'integration', 'shared'])],
   ['shared', new Set()],
 ]);
 
@@ -59,7 +55,6 @@ function resolveInternalModule(from: string, specifier: string): string | null {
 
   if (specifier.startsWith('@/')) return specifier.slice(2).split('/')[0] ?? null;
   if (specifier.startsWith('@core/')) return 'core';
-  if (specifier.startsWith('@animation/')) return 'animation';
   if (specifier.startsWith('@audio/')) return 'audio';
   if (specifier.startsWith('@export/')) return 'export';
   if (specifier.startsWith('@integration/')) return 'integration';

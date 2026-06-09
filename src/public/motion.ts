@@ -3,7 +3,7 @@ export {
   createAnimationController,
   createExpressionRenderHook,
   createLiveEditSession,
-} from '../animation';
+} from '../core/motion';
 export type {
   AnimatableProperty,
   Animation,
@@ -27,7 +27,7 @@ export type {
   LiveEditParseMode,
   LiveEditSession,
   LiveEditSessionOptions,
-} from '../animation';
+} from '../shared';
 export {
   blur,
   brightness,

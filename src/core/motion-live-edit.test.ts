@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { createAnimationController } from '../animation';
-import { createComposition } from '../core/composition';
-import { createLiveEditSession, type LiveEditInput } from './index';
+import type { LiveEditInput } from '../shared';
+import { createComposition } from './composition';
+import { createAnimationController, createLiveEditSession } from './motion';
 
 class FakeInput implements LiveEditInput {
   value: string;

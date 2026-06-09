@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { createComposition } from '../core/composition';
+import { createComposition } from './composition';
 import { createTimelineSynchronizer } from '../integration/synchronization';
 import type { EffectHandle, ScrawlEffectsAdapter } from '../shared';
-import { createAnimationController, createExpressionRenderHook } from './index';
+import { createAnimationController, createExpressionRenderHook } from './motion';
 
 function createObservedLayer() {
   const setCalls: Array<Readonly<Record<string, unknown>>> = [];

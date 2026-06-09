@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createAnimationController } from '../animation';
+import { createAnimationController } from './motion';
 import type { EffectConfig, EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createComposition } from './composition';
 
