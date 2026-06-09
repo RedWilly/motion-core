@@ -568,6 +568,32 @@ export function createAnimationController(composition: Composition): AnimationCo
   return getMotionController(composition);
 }
 
+export function setMotionValue(
+  controller: AnimationController,
+  target: Layer | Record<string, number>,
+  property: AnimatableProperty | string,
+  value: number,
+  options: MotionSetOptions = {},
+): void {
+  if (isLayer(target)) {
+    controller.setLayerProperty(target, property as AnimatableProperty, value, options);
+    return;
+  }
+
+  controller.setValue(target, property, value, options);
+}
+
+export function bindMotionInput(
+  controller: AnimationController,
+  input: LiveEditInput,
+  target: Layer | Record<string, number>,
+  property: AnimatableProperty | string,
+  options: LiveEditBindingOptions = {},
+): () => void {
+  if (isLayer(target)) return controller.bindLayerInput(input, target, property as AnimatableProperty, options);
+  return controller.bindInput(input, target, property, options);
+}
+
 export function createLiveEditSession(
   composition: Composition,
   options: LiveEditSessionOptions = {},

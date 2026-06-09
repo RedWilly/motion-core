@@ -57,7 +57,7 @@ import {
 import { createShapeState, createTextState } from './layer-state';
 import { createVideoMediaTarget } from './media-targets';
 import { MotionTargetRegistry } from './motion-targets';
-import { getMotionController } from './motion';
+import { bindMotionInput, getMotionController, setMotionValue } from './motion';
 
 const defaultPositionX = 0;
 const defaultPositionY = 0;
@@ -471,7 +471,7 @@ export function createComposition(
       value: number,
       options?: MotionSetOptions,
     ): void => {
-      getMotionController(composition).set(target as never, property as never, value, options);
+      setMotionValue(getMotionController(composition), target, property, value, options);
     },
 
     bind: (
@@ -480,7 +480,7 @@ export function createComposition(
       property: AnimatableProperty | string,
       options?: LiveEditBindingOptions,
     ) =>
-      getMotionController(composition).bind(input, target as never, property as never, options),
+      bindMotionInput(getMotionController(composition), input, target, property, options),
 
     setExpression: (layer, property, evaluator) =>
       getMotionController(composition).setExpression(layer, property, evaluator),
