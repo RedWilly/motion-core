@@ -1,94 +1,40 @@
 import { EngineError, validationError } from '../shared/errors';
-import type { Composition, Layer } from '../shared/project';
-import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime';
 import { createId } from '../shared/ids';
-import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 import {
-  bindMotionTargetProperty,
   bindLayerMotionProperty,
+  bindMotionTargetProperty,
   readNumericBinding,
   writeNumericBinding,
-  type LayerMotionProperty,
   type NumericPropertyBinding,
 } from '../shared/layer-properties';
-
-export type AnimatableProperty = LayerMotionProperty;
-
-export type Easing = string | ((progress: number) => number);
-
-export type AnimationValues = Partial<Record<AnimatableProperty, number>>;
-
-export type MotionTargetValues<TValues extends Record<string, number>> = Partial<TValues>;
-
-export interface KeyframeConfig {
-  easing?: Easing;
-  hold?: boolean;
-}
-
-export interface AnimationConfig {
-  duration: number;
-  delay?: number;
-  easing?: Easing;
-  repeat?: number;
-  yoyo?: boolean;
-  onComplete?: () => void;
-}
-
-export interface Keyframe {
-  id: string;
-  property: AnimatableProperty;
-  time: number;
-  value: number;
-  easing: Easing;
-  hold: boolean;
-}
-
-export interface Animation {
-  id: string;
-  tweens: readonly TimelineTweenAdapter[];
-  kill(): void;
-}
-
-export interface ExpressionAudioContext {
-  amplitude: number;
-  bands: {
-    bass: number;
-    mid: number;
-    treble: number;
-  };
-}
-
-export interface ExpressionContext {
-  time: number;
-  frame: number;
-  layer: Layer;
-  property: AnimatableProperty;
-  value: number;
-  audio?: ExpressionAudioContext;
-}
-
-export interface ExpressionHelpers {
-  clamp(value: number, min: number, max: number): number;
-  lerp(start: number, end: number, amount: number): number;
-  random(min?: number, max?: number, seed?: number): number;
-  wiggle(frequency: number, amplitude: number, seed?: number): number;
-}
-
-export interface Expression {
-  id: string;
-  layer: Layer;
-  property: AnimatableProperty;
-  evaluator: ExpressionEvaluator;
-}
-
-export interface ExpressionApplyResult {
-  applied: number;
-  errors: readonly EngineError[];
-}
-
-export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
-
-export type ExpressionEvaluator = (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
+import type {
+  AnimatableProperty,
+  Animation,
+  AnimationConfig,
+  AnimationValues,
+  Composition,
+  Easing,
+  Expression,
+  ExpressionApplyResult,
+  ExpressionAudioContext,
+  ExpressionAudioProvider,
+  ExpressionContext,
+  ExpressionEvaluator,
+  ExpressionHelpers,
+  Keyframe,
+  KeyframeConfig,
+  Layer,
+  LiveEditBindingOptions,
+  LiveEditInput,
+  LiveEditOptions,
+  LiveEditParseMode,
+  LiveEditSession,
+  LiveEditSessionOptions,
+  MotionSetOptions,
+  MotionTargetValues,
+} from '../shared/project';
+import type { MotionStateTarget, TimelineTweenAdapter } from '../shared/runtime';
+import { syncLayerToScrawl, type PreRenderHook } from '../integration/synchronization';
 
 type PropertyBinding = NumericPropertyBinding;
 
@@ -111,19 +57,39 @@ interface CompiledExpression extends Expression {
   lastValidValue: number;
 }
 
-const defaultEase = 'power1.out';
+interface LiveEditBinding {
+  dispose(): void;
+}
 
-export class AnimationController {
+const defaultEase = 'power1.out';
+const defaultEvents = ['input', 'change'] as const;
+const motionControllers = new WeakMap<Composition, AnimationController>();
+
+export class AnimationController implements MotionStateTarget, LiveEditSession {
   readonly values: Record<string, number> = {};
   private readonly composition: Composition;
   private readonly keyframes = new Map<Layer, Map<AnimatableProperty, Keyframe[]>>();
   private readonly baselines = new Map<Layer, Map<AnimatableProperty, number>>();
   private readonly expressions = new Map<Layer, Map<AnimatableProperty, CompiledExpression>>();
   private readonly expressionErrors: EngineError[] = [];
+  private readonly touchedLayers = new Set<Layer>();
+  private readonly bindings: LiveEditBinding[] = [];
+  private readonly schedule: (callback: () => void) => () => void;
+  private readonly defaultRender: boolean;
+  private readonly compositionOwned: boolean;
+  private readonly unregisterMotionTarget: () => void;
+  private pendingCancel: (() => void) | null = null;
+  private pending = false;
+  private disposed = false;
+  private renderPending = false;
 
-  constructor(composition: Composition) {
+  constructor(composition: Composition, options: LiveEditSessionOptions = {}, compositionOwned = true) {
     this.composition = composition;
-    this.composition.registerMotionTarget(this);
+    this.schedule = options.schedule ?? defaultSchedule;
+    this.defaultRender = options.render ?? true;
+    this.compositionOwned = compositionOwned;
+    this.unregisterMotionTarget = this.composition.registerMotionTarget(this);
+    if (compositionOwned && !motionControllers.has(composition)) motionControllers.set(composition, this);
   }
 
   addKeyframe(
@@ -166,6 +132,16 @@ export class AnimationController {
     existing.hold = config.hold ?? existing.hold;
 
     return existing;
+  }
+
+  key(
+    layer: Layer,
+    property: AnimatableProperty,
+    time: number,
+    value: number,
+    config: KeyframeConfig = {},
+  ): Keyframe {
+    return this.editKeyframe(layer, property, time, value, config);
   }
 
   findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined {
@@ -220,6 +196,139 @@ export class AnimationController {
     return this.animateBindings(requests, config);
   }
 
+  set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
+  set<TKey extends string>(
+    values: Record<TKey, number>,
+    key: TKey,
+    value: number,
+    options?: MotionSetOptions,
+  ): void;
+  set(
+    target: Layer | Record<string, number>,
+    property: AnimatableProperty | string,
+    value: number,
+    options: MotionSetOptions = {},
+  ): void {
+    if (!Number.isFinite(value)) return;
+
+    if (isLayer(target)) {
+      this.setLayerProperty(target, property as AnimatableProperty, value, options);
+      return;
+    }
+
+    this.setValue(target, property, value, options);
+  }
+
+  bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
+  bind<TKey extends string>(
+    input: LiveEditInput,
+    values: Record<TKey, number>,
+    key: TKey,
+    options?: LiveEditBindingOptions,
+  ): () => void;
+  bind(
+    input: LiveEditInput,
+    target: Layer | Record<string, number>,
+    property: AnimatableProperty | string,
+    options: LiveEditBindingOptions = {},
+  ): () => void {
+    if (isLayer(target)) return this.bindLayerInput(input, target, property as AnimatableProperty, options);
+    return this.bindInput(input, target, property, options);
+  }
+
+  bindInput<TKey extends string>(
+    input: LiveEditInput,
+    values: Record<TKey, number>,
+    key: TKey,
+    options: LiveEditBindingOptions = {},
+  ): () => void {
+    if (this.disposed) return noop;
+    const events = normalizeEvents(options.event);
+    const parse = options.parse ?? 'float';
+    const listener = (): void => {
+      this.setValue(values, key, parseInputValue(input, parse), {
+        ...options.edit,
+        ...(options.render === undefined ? null : { render: options.render }),
+      });
+    };
+
+    for (const event of events) input.addEventListener(event, listener);
+    const binding = {
+      dispose(): void {
+        for (const event of events) input.removeEventListener(event, listener);
+      },
+    };
+    this.bindings.push(binding);
+    return () => this.removeBinding(binding);
+  }
+
+  setValue<TKey extends string>(
+    values: Record<TKey, number>,
+    key: TKey,
+    value: number,
+    options: MotionSetOptions = {},
+  ): void {
+    if (!Number.isFinite(value)) return;
+    if (values[key] === value) return;
+    values[key] = value;
+    if (options.mode === 'autoKey') {
+      const time = options.time ?? this.composition.timeline.time();
+      this.composition.timeline.set?.(values, { [key]: value }, time);
+    }
+    this.queue(options.render ?? this.defaultRender);
+  }
+
+  bindLayerInput(
+    input: LiveEditInput,
+    layer: Layer,
+    property: AnimatableProperty,
+    options: LiveEditBindingOptions = {},
+  ): () => void {
+    if (this.disposed) return noop;
+    const events = normalizeEvents(options.event);
+    const parse = options.parse ?? 'float';
+    const listener = (): void => {
+      this.setLayerProperty(layer, property, parseInputValue(input, parse), {
+        ...options.edit,
+        ...(options.render === undefined ? null : { render: options.render }),
+      });
+    };
+
+    for (const event of events) input.addEventListener(event, listener);
+    const binding = {
+      dispose(): void {
+        for (const event of events) input.removeEventListener(event, listener);
+      },
+    };
+    this.bindings.push(binding);
+    return () => this.removeBinding(binding);
+  }
+
+  setLayerProperty(
+    layer: Layer,
+    property: AnimatableProperty,
+    value: number,
+    options: MotionSetOptions = {},
+  ): void {
+    if (!Number.isFinite(value)) return;
+    const binding = bindLayerMotionProperty(layer, property);
+    if (binding.target[binding.key] === value) return;
+
+    if (options.mode === 'autoKey') {
+      const controller = options.animation ?? this;
+      controller.editKeyframe(
+        layer,
+        property,
+        options.time ?? this.composition.timeline.time(),
+        value,
+        options.keyframe,
+      );
+    }
+
+    writeNumericBinding(binding, value);
+    this.queue(options.render ?? this.defaultRender);
+  }
+
   removeAnimationsForLayer(layer: Layer): void {
     this.keyframes.delete(layer);
     this.baselines.delete(layer);
@@ -236,17 +345,18 @@ export class AnimationController {
 
   apply(): void {
     const time = this.composition.timeline.time();
-    const touchedLayers = new Set<Layer>();
+    this.touchedLayers.clear();
     for (const [layer, layerKeyframes] of this.keyframes) {
       if (layer.locked) continue;
       for (const [property, keyframes] of layerKeyframes) {
         const value = evaluateKeyframes(this.readBaseline(layer, property), keyframes, time, this.composition.timeline.parseEase);
         if (value === undefined) continue;
         writeBindingValue(bindLayerMotionProperty(layer, property), value);
-        touchedLayers.add(layer);
+        this.touchedLayers.add(layer);
       }
     }
-    for (const layer of touchedLayers) syncLayerToScrawl(layer);
+    for (const layer of this.touchedLayers) syncLayerToScrawl(layer);
+    this.touchedLayers.clear();
   }
 
   setExpression(layer: Layer, property: AnimatableProperty, evaluator: ExpressionEvaluator): Expression {
@@ -287,7 +397,7 @@ export class AnimationController {
 
     this.expressionErrors.length = 0;
     let applied = 0;
-    const touchedLayers = new Set<Layer>();
+    this.touchedLayers.clear();
 
     for (const [layer, layerExpressions] of this.expressions) {
       if (layer.locked) continue;
@@ -306,17 +416,40 @@ export class AnimationController {
           this.expressionErrors.push(createExpressionError(expression, error));
         }
 
-        touchedLayers.add(layer);
+        this.touchedLayers.add(layer);
       }
     }
 
-    for (const layer of touchedLayers) syncLayerToScrawl(layer);
+    for (const layer of this.touchedLayers) syncLayerToScrawl(layer);
+    this.touchedLayers.clear();
 
     return { applied, errors: [...this.expressionErrors] };
   }
 
   getExpressionErrors(): readonly EngineError[] {
     return this.expressionErrors;
+  }
+
+  flush(): void {
+    if (this.disposed) return;
+    this.pending = false;
+    this.pendingCancel = null;
+    this.composition.syncFrame();
+    if (this.renderPending) void this.composition.renderer.renderFrame();
+    this.renderPending = false;
+  }
+
+  dispose(): void {
+    if (this.disposed && !this.compositionOwned) return;
+    this.pendingCancel?.();
+    this.pending = false;
+    this.pendingCancel = null;
+    this.renderPending = false;
+    while (this.bindings.length > 0) this.bindings.pop()?.dispose();
+    if (!this.compositionOwned) {
+      this.disposed = true;
+      this.unregisterMotionTarget();
+    }
   }
 
   private getPropertyKeyframes(layer: Layer, property: AnimatableProperty): Keyframe[] {
@@ -407,14 +540,69 @@ export class AnimationController {
     if (baseline !== undefined) return baseline;
     return readBindingValue(bindLayerMotionProperty(layer, property));
   }
+
+  private queue(render: boolean): void {
+    if (this.disposed) return;
+    this.renderPending ||= render;
+    if (this.pending) return;
+    this.pending = true;
+    const cancel = this.schedule(() => this.flush());
+    this.pendingCancel = this.pending ? cancel : null;
+  }
+
+  private removeBinding(binding: LiveEditBinding): void {
+    const index = this.bindings.indexOf(binding);
+    if (index < 0) return;
+    this.bindings.splice(index, 1);
+    binding.dispose();
+  }
 }
 
-export function createAnimationController(composition: Composition): AnimationController {
+export function getMotionController(composition: Composition): AnimationController {
+  const existing = motionControllers.get(composition);
+  if (existing !== undefined) return existing;
   return new AnimationController(composition);
 }
 
-export function createExpressionRenderHook(
+export function createAnimationController(composition: Composition): AnimationController {
+  return getMotionController(composition);
+}
+
+export function setMotionValue(
   controller: AnimationController,
+  target: Layer | Record<string, number>,
+  property: AnimatableProperty | string,
+  value: number,
+  options: MotionSetOptions = {},
+): void {
+  if (isLayer(target)) {
+    controller.setLayerProperty(target, property as AnimatableProperty, value, options);
+    return;
+  }
+
+  controller.setValue(target, property, value, options);
+}
+
+export function bindMotionInput(
+  controller: AnimationController,
+  input: LiveEditInput,
+  target: Layer | Record<string, number>,
+  property: AnimatableProperty | string,
+  options: LiveEditBindingOptions = {},
+): () => void {
+  if (isLayer(target)) return controller.bindLayerInput(input, target, property as AnimatableProperty, options);
+  return controller.bindInput(input, target, property, options);
+}
+
+export function createLiveEditSession(
+  composition: Composition,
+  options: LiveEditSessionOptions = {},
+): LiveEditSession {
+  return new AnimationController(composition, options, false);
+}
+
+export function createExpressionRenderHook(
+  controller: Pick<AnimationController, 'applyExpressions'>,
   getAudio?: ExpressionAudioProvider,
 ): PreRenderHook {
   return {
@@ -602,4 +790,55 @@ function insertSorted(keyframes: Keyframe[], keyframe: Keyframe): void {
     index += 1;
   }
   keyframes.splice(index, 0, keyframe);
+}
+
+function normalizeEvents(event: LiveEditBindingOptions['event']): readonly string[] {
+  if (event === undefined) return defaultEvents;
+  return typeof event === 'string' ? [event] : event;
+}
+
+function parseInputValue(input: LiveEditInput, parse: LiveEditParseMode): number {
+  if (typeof parse === 'function') return parse(input.value, input);
+
+  switch (parse) {
+    case 'int':
+      return parseInt(input.value, 10);
+    case 'round':
+      return Math.round(Number(input.value));
+    case 'roundDown':
+      return Math.floor(Number(input.value));
+    case 'roundUp':
+      return Math.ceil(Number(input.value));
+    case 'boolean':
+      return input.value === 'true' || Number(input.value) > 0 ? 1 : 0;
+    case 'float':
+      return parseFloat(input.value);
+  }
+}
+
+function defaultSchedule(callback: () => void): () => void {
+  const request = globalThis.requestAnimationFrame;
+  const cancel = globalThis.cancelAnimationFrame;
+
+  if (request !== undefined && cancel !== undefined) {
+    const id = request(callback);
+    return () => cancel(id);
+  }
+
+  const id = globalThis.setTimeout(callback, 0);
+  return () => globalThis.clearTimeout(id);
+}
+
+function isLayer(value: Layer | Record<string, number>): value is Layer {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'transform' in value &&
+    'scrawlEntity' in value &&
+    'scrawlState' in value
+  );
+}
+
+function noop(): void {
+  return undefined;
 }

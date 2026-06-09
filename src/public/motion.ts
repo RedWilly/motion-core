@@ -2,7 +2,8 @@ export {
   AnimationController,
   createAnimationController,
   createExpressionRenderHook,
-} from '../animation';
+  createLiveEditSession,
+} from '../core/motion';
 export type {
   AnimatableProperty,
   Animation,
@@ -19,7 +20,14 @@ export type {
   Keyframe,
   KeyframeConfig,
   MotionTargetValues,
-} from '../animation';
+  LiveEditBindingOptions,
+  LiveEditOptions,
+  LiveEditInput,
+  LiveEditMode,
+  LiveEditParseMode,
+  LiveEditSession,
+  LiveEditSessionOptions,
+} from '../shared';
 export {
   blur,
   brightness,
@@ -32,13 +40,3 @@ export {
   threshold,
   tint,
 } from '../shared/effect-presets';
-export { createLiveEditSession } from '../editor';
-export type {
-  LiveEditBindingOptions,
-  LiveEditOptions,
-  LiveEditInput,
-  LiveEditMode,
-  LiveEditParseMode,
-  LiveEditSession,
-  LiveEditSessionOptions,
-} from '../editor';

@@ -1,15 +1,5 @@
-import type { Layer } from './project';
+import type { Layer, LayerMotionProperty } from './project';
 import type { MotionStateTarget } from './runtime';
-
-export type LayerMotionProperty =
-  | 'position.x'
-  | 'position.y'
-  | 'rotation'
-  | 'scale.x'
-  | 'scale.y'
-  | 'anchor.x'
-  | 'anchor.y'
-  | 'opacity';
 
 export interface NumericPropertyBinding {
   readonly target: Record<string, number>;

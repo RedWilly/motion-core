@@ -1,5 +1,4 @@
 import {
-  createAnimationController,
   createComposition,
   createGsapTimelineFactory,
   effectPresets,
@@ -87,11 +86,10 @@ async function main() {
     },
   });
 
-  const controller = createAnimationController(composition);
   const blur = orb.effects[0];
   const fill = orb.shape?.fill;
   const stroke = orb.shape?.stroke;
-  controller.animateTarget(orbGradient, {
+  composition.animateTarget(orbGradient, {
     paletteStart: 180,
     paletteEnd: 819,
   }, {
@@ -100,7 +98,7 @@ async function main() {
     repeat: -1,
     yoyo: true,
   });
-  controller.animate(orb, {
+  composition.animate(orb, {
     'position.x': 700,
     rotation: 360,
     opacity: 0.74,
@@ -111,7 +109,7 @@ async function main() {
     yoyo: true,
   });
   if (fill !== undefined) {
-    controller.animateTarget(fill, {
+    composition.animateTarget(fill, {
       opacity: 1,
     }, {
       duration: 1.1,
@@ -119,7 +117,7 @@ async function main() {
     });
   }
   if (stroke !== undefined) {
-    controller.animateTarget(stroke, {
+    composition.animateTarget(stroke, {
       width: 10,
     }, {
       duration: 0.7,
@@ -129,7 +127,7 @@ async function main() {
     });
   }
   if (blur !== undefined) {
-    controller.animateTarget(blur, {
+    composition.animateTarget(blur, {
       radius: 8,
     }, {
       duration: 1.2,
@@ -138,7 +136,7 @@ async function main() {
       yoyo: true,
     });
   }
-  controller.animate(label, {
+  composition.animate(label, {
     'position.y': 398,
   }, {
     duration: 1.4,

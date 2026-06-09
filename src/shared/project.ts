@@ -3,7 +3,9 @@ import type {
   MotionStateTarget,
   RenderAdapter,
   TimelineAdapter,
+  TimelineTweenAdapter,
 } from './runtime';
+import type { EngineError } from './errors';
 import type {
   ScrawlCellAdapter,
   ScrawlEntityAdapter,
@@ -49,6 +51,224 @@ export interface CompositionConfig {
   frameRate?: number;
   backgroundColor?: string;
   name?: string;
+}
+
+export type LayerMotionProperty =
+  | 'position.x'
+  | 'position.y'
+  | 'rotation'
+  | 'scale.x'
+  | 'scale.y'
+  | 'anchor.x'
+  | 'anchor.y'
+  | 'opacity';
+
+export type AnimatableProperty = LayerMotionProperty;
+
+export type Easing = string | ((progress: number) => number);
+
+export type AnimationValues = Partial<Record<AnimatableProperty, number>>;
+
+export type MotionTargetValues<TValues extends Record<string, number>> = Partial<TValues>;
+
+export interface KeyframeConfig {
+  easing?: Easing;
+  hold?: boolean;
+}
+
+export interface AnimationConfig {
+  duration: number;
+  delay?: number;
+  easing?: Easing;
+  repeat?: number;
+  yoyo?: boolean;
+  onComplete?: () => void;
+}
+
+export interface Keyframe {
+  id: string;
+  property: AnimatableProperty;
+  time: number;
+  value: number;
+  easing: Easing;
+  hold: boolean;
+}
+
+export interface Animation {
+  id: string;
+  tweens: readonly TimelineTweenAdapter[];
+  kill(): void;
+}
+
+export interface ExpressionAudioContext {
+  amplitude: number;
+  bands: {
+    bass: number;
+    mid: number;
+    treble: number;
+  };
+}
+
+export interface ExpressionContext {
+  time: number;
+  frame: number;
+  layer: Layer;
+  property: AnimatableProperty;
+  value: number;
+  audio?: ExpressionAudioContext;
+}
+
+export interface ExpressionHelpers {
+  clamp(value: number, min: number, max: number): number;
+  lerp(start: number, end: number, amount: number): number;
+  random(min?: number, max?: number, seed?: number): number;
+  wiggle(frequency: number, amplitude: number, seed?: number): number;
+}
+
+export interface Expression {
+  id: string;
+  layer: Layer;
+  property: AnimatableProperty;
+  evaluator: ExpressionEvaluator;
+}
+
+export interface ExpressionApplyResult {
+  applied: number;
+  errors: readonly EngineError[];
+}
+
+export type ExpressionAudioProvider = () => ExpressionAudioContext | undefined;
+
+export type ExpressionEvaluator = (context: ExpressionContext, helpers: ExpressionHelpers) => unknown;
+
+export type LiveEditParseMode =
+  | 'float'
+  | 'int'
+  | 'round'
+  | 'roundDown'
+  | 'roundUp'
+  | 'boolean'
+  | ((value: string, input: LiveEditInput) => number);
+
+export interface LiveEditInput {
+  readonly value: string;
+  addEventListener(type: string, listener: (event: Event) => void): void;
+  removeEventListener(type: string, listener: (event: Event) => void): void;
+}
+
+export type LiveEditMode = 'set' | 'autoKey';
+
+export interface LiveEditOptions {
+  readonly mode?: LiveEditMode;
+  readonly animation?: Pick<MotionKeyframes, 'editKeyframe'>;
+  readonly keyframe?: KeyframeConfig;
+  readonly time?: number;
+}
+
+export interface LiveEditBindingOptions {
+  readonly event?: string | readonly string[];
+  readonly parse?: LiveEditParseMode;
+  readonly edit?: LiveEditOptions;
+  readonly render?: boolean;
+}
+
+export interface LiveEditSessionOptions {
+  readonly schedule?: (callback: () => void) => () => void;
+  readonly render?: boolean;
+}
+
+export interface MotionSetOptions extends LiveEditOptions {
+  readonly render?: boolean;
+}
+
+export interface MotionKeyframes {
+  addKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
+  editKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
+  key(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
+  findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined;
+  removeKeyframe(layer: Layer, keyframe: Keyframe): void;
+}
+
+export interface MotionPlayback {
+  animate(layer: Layer, values: AnimationValues, config: AnimationConfig): Animation;
+  animateTarget<TValues extends Record<string, number>>(
+    target: MotionStateTarget<TValues>,
+    values: MotionTargetValues<TValues>,
+    config: AnimationConfig,
+  ): Animation;
+  removeAnimationsForLayer(layer: Layer): void;
+}
+
+export interface MotionSet {
+  set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
+  set<TKey extends string>(
+    values: Record<TKey, number>,
+    key: TKey,
+    value: number,
+    options?: MotionSetOptions,
+  ): void;
+}
+
+export interface MotionBindings {
+  bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
+  bind<TKey extends string>(
+    input: LiveEditInput,
+    values: Record<TKey, number>,
+    key: TKey,
+    options?: LiveEditBindingOptions,
+  ): () => void;
+}
+
+export interface MotionExpressions {
+  setExpression(layer: Layer, property: AnimatableProperty, evaluator: ExpressionEvaluator): Expression;
+  removeExpression(layer: Layer, property: AnimatableProperty): void;
+  applyExpressions(time?: number, audio?: ExpressionAudioContext): ExpressionApplyResult;
+  getExpressionErrors(): readonly EngineError[];
+}
+
+export interface MotionFlush {
+  flush(): void;
+}
+
+export interface MotionLifecycle extends MotionFlush {
+  dispose(): void;
+}
+
+export interface MotionCommands
+  extends MotionKeyframes,
+    MotionPlayback,
+    MotionSet,
+    MotionBindings,
+    MotionExpressions,
+    MotionLifecycle {
+  readonly values: Record<string, number>;
+}
+
+export interface LiveEditSession extends MotionBindings, MotionSet, MotionLifecycle {
+  bindInput<TKey extends string>(
+    input: LiveEditInput,
+    values: Record<TKey, number>,
+    key: TKey,
+    options?: LiveEditBindingOptions,
+  ): () => void;
+  setValue<TKey extends string>(
+    values: Record<TKey, number>,
+    key: TKey,
+    value: number,
+    options?: MotionSetOptions,
+  ): void;
+  bindLayerInput(
+    input: LiveEditInput,
+    layer: Layer,
+    property: AnimatableProperty,
+    options?: LiveEditBindingOptions,
+  ): () => void;
+  setLayerProperty(
+    layer: Layer,
+    property: AnimatableProperty,
+    value: number,
+    options?: MotionSetOptions,
+  ): void;
 }
 
 export type CompositionUpdateConfig = Partial<CompositionConfig>;
@@ -236,7 +456,13 @@ export interface LayerMaskState extends Required<Pick<MaskConfig, 'mode'>> {
   scrawlCell?: ScrawlCellAdapter;
 }
 
-export interface Composition {
+export interface Composition
+  extends MotionKeyframes,
+    MotionPlayback,
+    MotionSet,
+    MotionBindings,
+    MotionExpressions,
+    MotionFlush {
   readonly id: string;
   readonly name: string;
   readonly width: number;

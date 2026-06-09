@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createAnimationController } from '../animation';
+import { createAnimationController } from './motion';
 import type { EffectConfig, EffectHandle, ScrawlEffectsAdapter } from '../shared';
 import { createComposition } from './composition';
 
@@ -44,6 +44,32 @@ function createFakeEffectsAdapter(): { adapter: ScrawlEffectsAdapter; calls: str
   };
 
   return { adapter, calls };
+}
+
+class FakeInput {
+  value: string;
+  readonly listeners = new Map<string, Set<(event: Event) => void>>();
+
+  constructor(value: string) {
+    this.value = value;
+  }
+
+  addEventListener(type: string, listener: (event: Event) => void): void {
+    let listeners = this.listeners.get(type);
+    if (listeners === undefined) {
+      listeners = new Set();
+      this.listeners.set(type, listeners);
+    }
+    listeners.add(listener);
+  }
+
+  removeEventListener(type: string, listener: (event: Event) => void): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  emit(type: string): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(new Event(type));
+  }
 }
 
 describe('createComposition', () => {
@@ -337,6 +363,37 @@ describe('createComposition', () => {
     expect(layer.textState?.values.pathPosition).toBe(0.5);
     expect(layer.textState?.values.lineSpacing).toBe(1.25);
     expect(setCalls.at(-1)).toMatchObject({ pathPosition: 0.5, lineSpacing: 1.25 });
+  });
+
+  test('exposes one composition-owned API for static edits, live edits, keyframes, and motion targets', () => {
+    const composition = createComposition({ width: 100, height: 100, duration: 2 });
+    const layer = composition.addLayer('shape', {
+      transform: { position: { x: 10, y: 0 } },
+    });
+    const liveLayer = composition.addLayer('shape');
+    const effect = composition.addEffect(layer, {
+      id: 'blur',
+      actions: [{ action: 'gaussian-blur', radius: 0 }],
+    });
+    const input = new FakeInput('64');
+
+    composition.set(layer, 'position.x', 40, { render: false });
+    composition.set(effect.values, 'radius', 8, { render: false });
+    composition.flush();
+
+    expect(layer.scrawlState.startX).toBe(40);
+    expect(effect.actions[0]?.radius).toBe(8);
+
+    composition.key(layer, 'position.x', 1, 100);
+    composition.seek(0.5);
+    expect(layer.transform.position.x).toBe(70);
+
+    composition.bind(input, liveLayer, 'position.x', { parse: 'round', render: false });
+    input.emit('input');
+    composition.flush();
+
+    expect(liveLayer.transform.position.x).toBe(64);
+    expect(liveLayer.scrawlState.startX).toBe(64);
   });
 
   test('creates video media state from Scrawl Picture video controls', () => {

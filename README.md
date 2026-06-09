@@ -55,6 +55,12 @@ Do not use it as a general scene graph or DOM animation library. The design assu
 For package consumers:
 
 ```bash
+npm install @willyrg/motionkit gsap mediabunny scrawl-canvas
+```
+
+Or with Bun:
+
+```bash
 bun add @willyrg/motionkit gsap mediabunny scrawl-canvas
 ```
 
@@ -77,6 +83,62 @@ Runtime libraries are peer dependencies:
 }
 ```
 
+## Minimal Example
+
+```html
+<canvas id="stage" width="1280" height="720"></canvas>
+```
+
+```ts
+import {
+  createComposition,
+  exportVideo,
+  loadBrowserScrawlAdapter,
+} from '@willyrg/motionkit';
+
+const adapters = await loadBrowserScrawlAdapter({
+  canvas: 'stage',
+  namespace: 'demo',
+  backgroundColor: '#101114',
+});
+
+const composition = createComposition({
+  name: 'demo',
+  width: 1280,
+  height: 720,
+  duration: 4,
+  frameRate: 30,
+}, adapters);
+
+composition.addLayer('shape', {
+  name: 'card',
+  shape: {
+    kind: 'rectangle',
+    width: 240,
+    height: 140,
+    fillStyle: '#ffcc00',
+  },
+  transform: {
+    position: { x: 320, y: 360 },
+    anchor: { x: 120, y: 70 },
+  },
+});
+
+const videoBlob = await exportVideo(composition, {
+  format: 'mp4',
+  quality: 'high',
+});
+
+const url = URL.createObjectURL(videoBlob);
+const link = document.createElement('a');
+link.href = url;
+link.download = 'motionkit-export.mp4';
+link.click();
+URL.revokeObjectURL(url);
+```
+
+MotionKit stores composition state. Scrawl-canvas renders that state to canvas. Mediabunny encodes the rendered canvas frames into video.
+
 ## Quick Start
 
 ```html
@@ -85,7 +147,6 @@ Runtime libraries are peer dependencies:
 
 ```ts
 import {
-  createAnimationController,
   createComposition,
   loadBrowserScrawlAdapter,
 } from '@willyrg/motionkit';
@@ -123,9 +184,8 @@ const box = composition.addLayer('shape', {
   },
 });
 
-const animation = createAnimationController(composition);
-animation.addKeyframe(box, 'position.x', 0, 240);
-animation.addKeyframe(box, 'position.x', 2, 960, { easing: 'power2.inOut' });
+composition.addKeyframe(box, 'position.x', 0, 240);
+composition.addKeyframe(box, 'position.x', 2, 960, { easing: 'power2.inOut' });
 
 composition.seek(0);
 composition.play();
@@ -135,7 +195,7 @@ What happens:
 
 - `createComposition` creates the typed model and runtime state.
 - `addLayer` creates a typed layer and a backing Scrawl entity through the adapter.
-- `createAnimationController` registers a motion target with the composition.
+- Composition-owned motion methods write keyframes, live edits, expressions, and tweens through one state path.
 - `seek` moves the timeline, applies motion state, syncs layer state to Scrawl, and renders one frame.
 - `play` starts media and the renderer-backed playback loop.
 
@@ -357,23 +417,19 @@ Add hooks for per-frame work such as expressions:
 
 ```ts
 const sync = createTimelineSynchronizer(composition, {
-  hooks: [createExpressionRenderHook(animation)],
+  hooks: [createExpressionRenderHook(composition)],
 });
 ```
 
 ## Animation And Expressions
 
-Create one animation controller per composition when you need keyframes, tweens, or expressions.
-
-```ts
-const animation = createAnimationController(composition);
-```
+Use the composition directly for keyframes, tweens, motion-target animation, and expressions. This keeps static edits, live edits, playback, preview, and export on the same state path.
 
 ### Keyframes
 
 ```ts
-animation.addKeyframe(layer, 'position.x', 0, 100);
-animation.addKeyframe(layer, 'position.x', 2, 900, {
+composition.addKeyframe(layer, 'position.x', 0, 100);
+composition.addKeyframe(layer, 'position.x', 2, 900, {
   easing: 'power2.inOut',
 });
 
@@ -383,8 +439,8 @@ composition.seek(1);
 Editable keyframes:
 
 ```ts
-animation.editKeyframe(layer, 'position.x', 2, 760);
-animation.removeKeyframe(layer, keyframe);
+composition.editKeyframe(layer, 'position.x', 2, 760);
+composition.removeKeyframe(layer, keyframe);
 ```
 
 `editKeyframe` is the preferred UI path: it creates a keyframe when missing and replaces the existing keyframe at the exact same time.
@@ -413,7 +469,7 @@ import { gsap } from 'gsap';
 
 adapters.createTimeline = createGsapTimelineFactory(gsap);
 
-animation.animate(layer, {
+composition.animate(layer, {
   'position.x': 900,
   opacity: 0.4,
 }, {
@@ -429,7 +485,7 @@ Any object with numeric `values` and `apply()` can be animated.
 ```ts
 const blurEffect = composition.addEffect(layer, blur({ id: 'soft', radius: 0 }));
 
-animation.animateTarget(blurEffect, {
+composition.animateTarget(blurEffect, {
   radius: 16,
 }, {
   duration: 0.6,
@@ -441,20 +497,20 @@ animation.animateTarget(blurEffect, {
 Expressions are evaluator functions. The engine does not compile strings.
 
 ```ts
-animation.setExpression(
+composition.setExpression(
   layer,
   'position.x',
   ({ value, time, frame, layer }, { clamp }) =>
     clamp(value + time * 20 + frame * 0.1 + layer.transform.position.y, 0, 1000),
 );
 
-const result = animation.applyExpressions(1);
+const result = composition.applyExpressions(1);
 ```
 
 Use a render hook to apply expressions every synchronized frame:
 
 ```ts
-const hook = createExpressionRenderHook(animation);
+const hook = createExpressionRenderHook(composition);
 const sync = createTimelineSynchronizer(composition, { hooks: [hook] });
 
 await sync.seek(2);
@@ -463,12 +519,12 @@ await sync.seek(2);
 Audio-reactive expressions:
 
 ```ts
-const hook = createExpressionRenderHook(animation, () => ({
+const hook = createExpressionRenderHook(composition, () => ({
   amplitude: 0.5,
   bands: { bass: 0.8, mid: 0.2, treble: 0.1 },
 }));
 
-animation.setExpression(
+composition.setExpression(
   layer,
   'opacity',
   ({ audio }) => (audio?.amplitude ?? 0) * (audio?.bands.bass ?? 0),
@@ -749,12 +805,10 @@ await bridge.seek(2);
 
 ## Live Editing
 
-Live edit sessions write UI input into the same state model used by animation and export.
+Live editing uses the same composition-owned methods as static edits and animation.
 
 ```ts
-const editor = createLiveEditSession(composition);
-
-editor.bindLayerInput(xInput, layer, 'position.x', {
+composition.bind(xInput, layer, 'position.x', {
   parse: 'float',
 });
 ```
@@ -764,7 +818,7 @@ Edit generic motion target values:
 ```ts
 const effect = composition.addEffect(layer, blur({ id: 'blur', radius: 0 }));
 
-editor.bindInput(radiusInput, effect.values, 'radius', {
+composition.bind(radiusInput, effect.values, 'radius', {
   parse: 'float',
 });
 ```
@@ -772,11 +826,8 @@ editor.bindInput(radiusInput, effect.values, 'radius', {
 Auto-key layer properties:
 
 ```ts
-const animation = createAnimationController(composition);
-
-editor.setLayerProperty(layer, 'position.x', 400, {
+composition.set(layer, 'position.x', 400, {
   mode: 'autoKey',
-  animation,
   time: composition.timeline.time(),
 });
 ```
@@ -784,16 +835,16 @@ editor.setLayerProperty(layer, 'position.x', 400, {
 Auto-key generic values:
 
 ```ts
-editor.setValue(effect.values, 'radius', 12, {
+composition.set(effect.values, 'radius', 12, {
   mode: 'autoKey',
   time: composition.timeline.time(),
 });
 ```
 
-Dispose sessions when UI is removed:
+Flush queued live edits when using a deferred scheduler:
 
 ```ts
-editor.dispose();
+composition.flush();
 ```
 
 ## Export
@@ -843,10 +894,35 @@ const videoBlob = await exportVideo(composition, {
   format: 'mp4',
   quality: 'high',
   frameRate: 30,
+  onProgress: (progress) => console.log(Math.round(progress * 100), '%'),
 });
+
+const url = URL.createObjectURL(videoBlob);
+const link = document.createElement('a');
+link.href = url;
+link.download = 'composition.mp4';
+link.click();
+URL.revokeObjectURL(url);
 ```
 
-The built-in video export adapter uses Mediabunny and requires a renderer with `getFrameCanvas`.
+The built-in video export adapter uses Mediabunny. You normally do not need to create it manually; `exportVideo` uses it by default.
+
+Video export has two runtime requirements:
+
+- A render adapter, usually from `loadBrowserScrawlAdapter`, so MotionKit can render each timeline frame to canvas.
+- The built-in Mediabunny export adapter, so MotionKit can encode those canvas frames into `mp4` or `webm`.
+
+You only pass a custom video adapter when replacing Mediabunny or changing encoder behavior:
+
+```ts
+const videoBlob = await exportVideo(
+  composition,
+  { format: 'webm', quality: 'medium' },
+  customVideoExportAdapter,
+);
+```
+
+Current built-in video export writes the visual canvas track. Audio layer synchronization is supported during playback, but the built-in export adapter does not currently mux audio into the exported video.
 
 ## Serialization
 
@@ -955,9 +1031,7 @@ seek/play/export
 
 ### Module Roles
 
-- `src/core`: composition lifecycle, layers, assets, masks, precomp ownership, motion target registry.
-- `src/animation`: keyframes, tweens, expression evaluator functions.
-- `src/editor`: UI/live-edit bindings that write into core state.
+- `src/core`: composition lifecycle, layers, assets, masks, precomp ownership, motion commands, live editing, keyframes, tweens, expressions, and motion target registry.
 - `src/integration`: Scrawl, GSAP, Mediabunny, serialization, synchronization.
 - `src/audio`: audio analysis and audio media bridge.
 - `src/export`: frame, sequence, and video export.
@@ -1109,16 +1183,13 @@ interface Transform {
 }
 ```
 
-### Animation
+### Motion And Editing
 
 ```ts
-function createAnimationController(composition: Composition): AnimationController;
-```
-
-```ts
-class AnimationController {
+interface Composition {
   addKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
   editKeyframe(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
+  key(layer: Layer, property: AnimatableProperty, time: number, value: number, config?: KeyframeConfig): Keyframe;
   findKeyframe(layer: Layer, property: AnimatableProperty, time: number): Keyframe | undefined;
   removeKeyframe(layer: Layer, keyframe: Keyframe): void;
 
@@ -1133,6 +1204,12 @@ class AnimationController {
   removeExpression(layer: Layer, property: AnimatableProperty): void;
   applyExpressions(time?: number, audio?: ExpressionAudioContext): ExpressionApplyResult;
   getExpressionErrors(): readonly EngineError[];
+
+  set(layer: Layer, property: AnimatableProperty, value: number, options?: MotionSetOptions): void;
+  set(target: Record<string, number>, property: string, value: number, options?: MotionSetOptions): void;
+  bind(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
+  bind(input: LiveEditInput, target: Record<string, number>, property: string, options?: LiveEditBindingOptions): () => void;
+  flush(): void;
 }
 ```
 
@@ -1204,26 +1281,6 @@ saturation(config: UniformChannelModulationEffectConfig): EffectConfig;
 channels(config?: ChannelModulationEffectConfig): EffectConfig;
 grayscale(config?: EffectPresetBase): EffectConfig;
 invert(config?: EffectPresetBase): EffectConfig;
-```
-
-### Live Editing
-
-```ts
-function createLiveEditSession(
-  composition: Composition,
-  options?: LiveEditSessionOptions,
-): LiveEditSession;
-```
-
-```ts
-interface LiveEditSession {
-  bindInput(input: LiveEditInput, target: Record<string, number>, property: string, options?: LiveEditBindingOptions): () => void;
-  bindLayerInput(input: LiveEditInput, layer: Layer, property: AnimatableProperty, options?: LiveEditBindingOptions): () => void;
-  setValue(target: Record<string, number>, property: string, value: number, options?: LiveEditOptions): void;
-  setLayerProperty(layer: Layer, property: AnimatableProperty, value: number, options?: LiveEditOptions): void;
-  flush(): void;
-  dispose(): void;
-}
 ```
 
 ### Export
@@ -1306,7 +1363,7 @@ try {
 ### Animation changes state but not the canvas
 
 - Use `composition.seek(time)` or `composition.syncFrame(time)` after keyframe changes.
-- For expression functions, call `animation.applyExpressions(time)` or use `createExpressionRenderHook`.
+- For expression functions, call `composition.applyExpressions(time)` or use `createExpressionRenderHook(composition)`.
 - For generic motion targets, call `composition.applyMotionTargets()` or sync a frame.
 
 ### Effects do not show
@@ -1332,7 +1389,10 @@ try {
 
 - Frame export requires `renderer.captureFrame`.
 - Video export requires `renderer.getFrameCanvas`.
+- Create browser compositions with `loadBrowserScrawlAdapter` before exporting video.
+- Mediabunny encodes the video; the render adapter still provides the canvas frames.
 - Video export needs browser encoder support required by Mediabunny.
+- Built-in video export currently writes the visual track only; muxed audio export needs a custom `VideoExportAdapter`.
 - `outputType: 'dataurl'` requires a runtime with `btoa`.
 
 ### Type imports are missing

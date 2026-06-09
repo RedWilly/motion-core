@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { createAnimationController } from '../animation';
-import { createComposition } from '../core/composition';
-import { createLiveEditSession, type LiveEditInput } from './index';
+import type { LiveEditInput } from '../shared';
+import { createComposition } from './composition';
+import { createAnimationController, createLiveEditSession } from './motion';
 
 class FakeInput implements LiveEditInput {
   value: string;
@@ -121,6 +121,40 @@ describe('LiveEditSession', () => {
 
     session.dispose();
     expect(events).toEqual(['cancel']);
+  });
+
+  test('disposing the default live edit session does not disable composition-owned motion APIs', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('shape');
+    const session = createLiveEditSession(composition);
+
+    session.dispose();
+    composition.set(layer, 'position.x', 32, { render: false });
+    composition.flush();
+
+    expect(layer.transform.position.x).toBe(32);
+    expect(layer.scrawlState.startX).toBe(32);
+  });
+
+  test('disposing a live edit session does not remove composition-owned bindings', () => {
+    const composition = createComposition({ width: 100, height: 100 });
+    const layer = composition.addLayer('shape');
+    const compositionInput = new FakeInput('24');
+    const sessionInput = new FakeInput('9');
+    const values = { x: 0 };
+
+    composition.bind(compositionInput, layer, 'position.x', { render: false });
+    const session = createLiveEditSession(composition);
+    session.bindInput(sessionInput, values, 'x');
+
+    session.dispose();
+    sessionInput.emit('input');
+    compositionInput.emit('input');
+    composition.flush();
+
+    expect(values.x).toBe(0);
+    expect(layer.transform.position.x).toBe(24);
+    expect(layer.scrawlState.startX).toBe(24);
   });
 
   test('binds layer motion properties through the same property map as animation', () => {
